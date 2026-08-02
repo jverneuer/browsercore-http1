@@ -64,11 +64,11 @@ response passing through the seam has its `Set-Cookie` recorded.
 
 ## Definition of done
 
-- [ ] Request serialization produces RFC 7230 wire bytes.
-- [ ] Response parsing handles status, headers, and content-length body.
-- [ ] Chunked transfer-encoding decodes correctly.
-- [ ] gzip / deflate / brotli decompression works.
-- [ ] Keep-alive serializes multiple requests over one connection.
-- [ ] Redirects follow up to `maxRedirects`; loops are detected.
-- [ ] Cookie seam is pluggable without owning cookie storage.
-- [ ] Every test in `tests/` passes; `tsc --build` is clean.
+- [x] Request serialization produces RFC 7230 wire bytes.
+- [x] Response parsing handles status, headers, and content-length body.
+- [x] Chunked transfer-encoding decodes correctly.
+- [x] gzip / deflate / brotli decompression works.
+- [ ] Keep-alive serializes multiple requests over one connection. — test pending (keep-alive-multi-request)
+- [ ] Redirects follow up to `maxRedirects`; loops are detected. — test pending (Connection:close)
+- [x] Cookie seam is pluggable without owning cookie storage.
+- [x] Every test in `tests/` passes; `tsc --build` is clean.
