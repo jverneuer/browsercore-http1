@@ -1,7 +1,7 @@
 {
   "name": "@browsercore/http1",
-  "version": "0.1.2",
-  "description": "HTTP/1.1 client over any duplex byte stream. No knowledge of TLS or TCP — only the protocol.",
+  "version": "0.1.3",
+  "description": "HTTP/1.1 client over any duplex byte stream. No knowledge of TLS or TCP \u2014 only the protocol.",
   "repository": {
     "type": "git",
     "url": "https://github.com/jverneuer/browsercore-http1.git"
@@ -20,7 +20,11 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "LICENSE", "README.md"],
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
@@ -38,6 +42,7 @@
     "vitest": "^2.1.8"
   },
   "dependencies": {
+    "@browsercore/compression": "latest",
     "@browsercore/transport": "latest"
   },
   "engines": {

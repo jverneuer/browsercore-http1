@@ -53,8 +53,10 @@ await conn.close();
 
 ```
 @browsercore/http1
+  └─ @browsercore/compression
   └─ @browsercore/transport
         └─ node:net / node:dns / node:crypto
 ```
 
-No other `@browsercore/*` packages are imported.
+`@browsercore/compression` wraps `node:zlib`; `@browsercore/http1` calls it
+never `node:zlib` directly.

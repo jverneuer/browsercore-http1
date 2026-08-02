@@ -2,12 +2,19 @@
  * Content-encoding decompression for HTTP/1.1 responses.
  *
  * Pure function — operates on the full buffered body bytes (after any
- * transfer-encoding has been removed). Uses `node:zlib` for gzip, deflate,
- * and brotli. Kept out of `message.ts` so the message parser stays a pure
- * wire-format function with no dependency on zlib.
+ * transfer-encoding has been removed). Delegates to `@browsercore/compression`
+ * so the zlib backend is replaceable; maps the provider's typed errors onto
+ * HTTP/1.1's `ContentEncodingError` to preserve this package's public contract.
+ *
+ * Kept out of `message.ts` so the message parser stays a pure wire-format
+ * function with no dependency on zlib.
  */
 
-import { gunzipSync, inflateSync, inflateRawSync, brotliDecompressSync } from "node:zlib";
+import {
+    compression,
+    DecompressionError,
+    UnsupportedEncodingError,
+} from "@browsercore/compression";
 import { ContentEncodingError } from "./errors.js";
 
 /** Content-encoding values we can decode — literal union, never bare `string`. */
@@ -24,54 +31,24 @@ export function isSupportedContentEncoding(value: string): value is ContentEncod
  * Decompress a body according to a `content-encoding` header value.
  *
  * For `deflate`, servers disagree on framing: some send a zlib-wrapped stream
- * (what the RFC calls for), some send raw deflate. We try zlib first and fall
- * back to raw inflate, matching the de-facto browser tolerance.
+ * (what the RFC calls for), some send raw deflate. The underlying provider
+ * tries zlib first and falls back to raw inflate, matching the de-facto
+ * browser tolerance.
  *
  * @throws {ContentEncodingError} on an unsupported value or corrupt stream.
  */
 export function decompressBody(body: Uint8Array, encoding: string): Uint8Array {
-    switch (encoding) {
-        case "gzip":
-        case "x-gzip":
-            return decompressWith((b) => gunzipSync(b), body, encoding);
-        case "deflate": {
-            // Try the RFC-mandated zlib-wrapped form first, then raw deflate.
-            try {
-                return decompressWith((b) => inflateSync(b), body, encoding);
-            } catch (zlibErr) {
-                if (zlibErr instanceof ContentEncodingError) {
-                    return decompressWith((b) => inflateRawSync(b), body, encoding);
-                }
-                throw zlibErr;
-            }
-        }
-        case "br":
-            return decompressWith((b) => brotliDecompressSync(b), body, encoding);
-        default:
-            throw new ContentEncodingError(encoding);
-    }
-}
-
-/** Run a zlib sync decoder, normalizing its Buffer output to a Uint8Array. */
-function runDecoder(fn: (b: Uint8Array) => Uint8Array | Buffer, body: Uint8Array): Uint8Array {
-    const out = fn(body);
-    return out instanceof Uint8Array ? out : new Uint8Array(out);
-}
-
-/** Run a decoder and wrap any failure in a typed {@link ContentEncodingError}. */
-function decompressWith(
-    fn: (b: Uint8Array) => Uint8Array | Buffer,
-    body: Uint8Array,
-    encoding: string,
-): Uint8Array {
     try {
-        return runDecoder(fn, body);
+        return compression.decompress(body, encoding);
     } catch (err) {
-        // exactOptionalPropertyTypes: only set `cause` when we have one.
-        const cause = err instanceof Error ? err : undefined;
-        if (cause !== undefined) {
-            throw new ContentEncodingError(encoding, { cause });
+        // The provider throws its own typed errors; re-wrap as http1's
+        // ContentEncodingError so this package's public contract is stable.
+        if (err instanceof UnsupportedEncodingError) {
+            throw new ContentEncodingError(err.encoding, { cause: err });
         }
-        throw new ContentEncodingError(encoding);
+        if (err instanceof DecompressionError) {
+            throw new ContentEncodingError(err.encoding, { cause: err });
+        }
+        throw err;
     }
 }
