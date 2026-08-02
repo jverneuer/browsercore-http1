@@ -1,5 +1,5 @@
 /**
- * @network/http1 — public API surface.
+ * @browsercore/http1 — public API surface.
  *
  * HTTP/1.1 client over any duplex byte stream. No knowledge of TLS or TCP.
  * Higher layers (cookies, fetch, profiles) compose exclusively through these exports.

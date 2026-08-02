@@ -1,4 +1,4 @@
-# @network/http1
+# @browsercore/http1
 
 An HTTP/1.1 client over any duplex byte stream.
 
@@ -20,7 +20,7 @@ a test double.
 ## Public API
 
 ```ts
-import { connectHttp1, RedirectLimitError } from "@network/http1";
+import { connectHttp1, RedirectLimitError } from "@browsercore/http1";
 
 const conn = await connectHttp1({ transport });
 const res = await conn.request({
@@ -52,9 +52,9 @@ await conn.close();
 ## Dependency graph
 
 ```
-@network/http1
-  └─ @network/transport
+@browsercore/http1
+  └─ @browsercore/transport
         └─ node:net / node:dns / node:crypto
 ```
 
-No other `@network/*` packages are imported.
+No other `@browsercore/*` packages are imported.

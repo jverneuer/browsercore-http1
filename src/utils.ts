@@ -1,5 +1,5 @@
 /**
- * Small shared helpers for @network/http1.
+ * Small shared helpers for @browsercore/http1.
  *
  * Kept dependency-free so every package can copy the pattern without pulling in
  * cross-package imports.

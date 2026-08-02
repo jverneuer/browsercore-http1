@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EventEmitter } from "node:events";
-import type { Transport } from "@network/transport";
+import type { Transport } from "@browsercore/transport";
 import { gzipSync, brotliCompressSync } from "node:zlib";
 import { connectHttp1 } from "../src/connection.js";
 import type { HttpRequest } from "../src/types.js";

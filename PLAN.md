@@ -1,4 +1,4 @@
-# @network/http1 — Implementation Plan
+# @browsercore/http1 — Implementation Plan
 
 HTTP/1.1 client over any duplex byte stream. Implement in this order; each step
 is independently testable.
@@ -55,7 +55,7 @@ than `maxRedirects` raises `RedirectLimitError` with the trail.
 
 ## Step 7 — Cookie header integration seam
 
-Provide a hook (callback or middleware slot) where `@network/cookies` can inject
+Provide a hook (callback or middleware slot) where `@browsercore/cookies` can inject
 `Cookie` headers into outgoing requests and read `Set-Cookie` headers from
 responses. This package does NOT implement cookie storage — only the seam.
 

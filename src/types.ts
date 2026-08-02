@@ -1,11 +1,11 @@
 /**
- * Domain types for @network/http1.
+ * Domain types for @browsercore/http1.
  *
  * HTTP/1.1 client over any duplex byte stream. This package owns NO knowledge
- * of TLS, TCP, or DNS — it composes exclusively over `@network/transport`.
+ * of TLS, TCP, or DNS — it composes exclusively over `@browsercore/transport`.
  */
 
-import type { Transport } from "@network/transport";
+import type { Transport } from "@browsercore/transport";
 
 /** Branded HTTP/1.1 connection identifier. */
 export type Http1ConnectionId = string & { __brand: "Http1ConnectionId" };
@@ -79,7 +79,7 @@ export interface Http1Connection {
 /**
  * Cookie-jar integration seam.
  *
- * http1 does NOT own cookie storage — the @network/fetch cookie jar does. This
+ * http1 does NOT own cookie storage — the @browsercore/fetch cookie jar does. This
  * interface is the seam: a caller that wants cookies injected / collected
  * supplies an implementation. When absent, requests pass through unchanged.
  *

@@ -1,5 +1,5 @@
 {
-  "name": "@network/http1",
+  "name": "@browsercore/http1",
   "version": "0.1.0",
   "description": "HTTP/1.1 client over any duplex byte stream. No knowledge of TLS or TCP — only the protocol.",
   "license": "MIT",
@@ -25,7 +25,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@network/transport": "workspace:*"
+    "@browsercore/transport": "^0.1.0"
   },
   "engines": {
     "node": ">=20.0.0"

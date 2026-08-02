@@ -1,8 +1,8 @@
 /**
- * HTTP redirect following — protocol-level capability for @network/http1.
+ * HTTP redirect following — protocol-level capability for @browsercore/http1.
  *
  * Design note: this logic is intentionally a STANDABLE exported function and is
- * NOT wired into {@link Http1ConnectionImpl.request}. The @network/fetch
+ * NOT wired into {@link Http1ConnectionImpl.request}. The @browsercore/fetch
  * package implements its own redirect following (and connection-pool migration
  * across origins) in `src/client.ts`. Auto-following here would double-follow
  * against fetch. Instead, `followRedirects` gives a clean, tested capability

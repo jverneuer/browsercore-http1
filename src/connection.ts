@@ -1,7 +1,7 @@
 /**
  * HTTP/1.1 connection implementation.
  *
- * Wires the message parser/serializer over a `@network/transport` duplex byte
+ * Wires the message parser/serializer over a `@browsercore/transport` duplex byte
  * stream. Handles keep-alive via serial request/response on a single connection.
  */
 
