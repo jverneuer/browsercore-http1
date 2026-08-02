@@ -7,7 +7,7 @@
 
 import type { HttpRequest, HttpResponse } from "./types.js";
 import { InvalidResponseError, ChunkEncodingError } from "./errors.js";
-import { assertNever } from "./utils.js";
+import { assertNever, decodeAscii, consumeTrailers } from "./utils.js";
 
 /** The start-line of an HTTP/1.1 message — discriminated by direction. */
 export type StartLine =
@@ -158,24 +158,6 @@ export async function* parseChunkedEncoding(stream: AsyncIterable<Uint8Array>): 
         return -1;
     };
 
-    // Consume the trailer section (zero or more header lines + blank line).
-    // Returns the offset just past the terminating blank line, or -1 if the
-    // buffer does not yet hold the full trailer section.
-    const consumeTrailers = (start: number): number => {
-        let lineStart = start;
-        for (let i = start; i + 1 < buffer.length; i++) {
-            if (buffer[i] !== 0x0d || buffer[i + 1] !== 0x0a) {
-                continue;
-            }
-            if (i === lineStart) {
-                // Blank line — end of trailers.
-                return i + 2;
-            }
-            lineStart = i + 2;
-        }
-        return -1;
-    };
-
     for await (const chunk of stream) {
         append(chunk);
         // Emit as many complete chunks as the buffer currently holds.
@@ -199,7 +181,7 @@ export async function* parseChunkedEncoding(stream: AsyncIterable<Uint8Array>): 
             if (size === 0) {
                 // Terminating chunk is just `0\r\n`; optional trailers + a final
                 // blank line follow. dataStart points past the `0\r\n`.
-                const trailerEnd = consumeTrailers(dataStart);
+                const trailerEnd = consumeTrailers(buffer, dataStart);
                 if (trailerEnd === -1) {
                     break drain; // Need more bytes for trailers.
                 }
@@ -227,17 +209,4 @@ export async function* parseChunkedEncoding(stream: AsyncIterable<Uint8Array>): 
 
     // Stream ended before the terminating zero chunk arrived.
     throw new ChunkEncodingError(consumed);
-}
-
-/** Decode a slice of bytes as ASCII without going through `Buffer`. */
-function decodeAscii(buf: Uint8Array, start: number, end: number): string {
-    let out = "";
-    for (let i = start; i < end; i++) {
-        const byte = buf[i];
-        if (byte === undefined) {
-            throw new Error("decodeAscii: index out of bounds");
-        }
-        out += String.fromCodePoint(byte);
-    }
-    return out;
 }

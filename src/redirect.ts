@@ -99,7 +99,7 @@ export async function followRedirects(
     // for loop detection and as the debug trail in the error.
     const trail: string[] = [currentUrl];
     let url = currentUrl;
-    let request: HttpRequest = req;
+    let request = req;
     let response = await conn.request(request);
 
     while (isRedirectStatus(response.statusCode)) {
