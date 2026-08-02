@@ -1,0 +1,33 @@
+{
+  "name": "@network/http1",
+  "version": "0.1.0",
+  "description": "HTTP/1.1 client over any duplex byte stream. No knowledge of TLS or TCP — only the protocol.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "LICENSE", "README.md"],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm run clean && npm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@network/transport": "workspace:*"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
