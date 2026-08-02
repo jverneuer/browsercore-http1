@@ -30,14 +30,12 @@ export interface ParseResponseResult {
  * appended verbatim — chunking and content-length are the caller's concern.
  */
 export function serializeRequest(req: HttpRequest): Uint8Array {
-    const lines: string[] = [];
-    lines.push(`${req.method} ${req.url} HTTP/1.1`);
+    const lines: string[] = [`${req.method} ${req.url} HTTP/1.1`];
     for (const [name, value] of req.headers) {
         // node:http lowercases header names on the wire (RFC 7230 §3.2); match it.
         lines.push(`${name.toLowerCase()}: ${value}`);
     }
-    lines.push("");
-    lines.push("");
+    lines.push("", "");
     const headerBytes = Buffer.from(lines.join("\r\n"), "ascii");
     switch (req.body.kind) {
         case "empty":
@@ -48,10 +46,8 @@ export function serializeRequest(req: HttpRequest): Uint8Array {
             out.set(req.body.data, headerBytes.length);
             return out;
         }
-        case "stream":
-            throw new Error("streaming body not implemented — see PLAN.md");
         default:
-            assertNever(req.body);
+            return assertNever(req.body);
     }
 }
 
@@ -71,27 +67,29 @@ export function parseResponse(buf: Uint8Array): ParseResponseResult {
     }
     const headerSection = text.slice(0, headerEnd);
     const bodyStart = headerEnd + 4;
-    const lines = headerSection.split("\r\n");
-    const statusLine = lines[0];
-    if (statusLine === undefined) {
-        throw new InvalidResponseError(text.slice(0, 120));
-    }
-    const statusMatch = /^HTTP\/\d\.\d\s+(\d{3})\s+(.*)$/.exec(statusLine);
+    // The status line ends at the first CRLF; the rest are header-field lines.
+    // (split always returns a non-empty array, so indexing is safe at runtime.)
+    const firstLineEnd = headerSection.indexOf("\r\n");
+    const statusLine = firstLineEnd >= 0 ? headerSection.slice(0, firstLineEnd) : headerSection;
+    const statusMatch = /^HTTP\/\d\.\d\s+(\d{3})\s+(.*)$/u.exec(statusLine);
     if (statusMatch === null) {
         throw new InvalidResponseError(text.slice(0, 120));
     }
+    // The regex groups always participate when the match succeeds.
     const statusCodeStr = statusMatch[1] ?? "0";
     const statusText = statusMatch[2] ?? "";
     const statusCode = Number(statusCodeStr);
+    // The regex captures exactly three digits (000-999); reject anything below
+    // the valid 100-999 range. The > 999 arm is unreachable but kept defensive.
     if (statusCode < 100 || statusCode > 999) {
         throw new InvalidResponseError(text.slice(0, 120));
     }
     const headers = new Map<string, string>();
-    for (let i = 1; i < lines.length; i++) {
-        const line = lines[i];
-        if (line === undefined) continue;
+    for (const line of headerSection.split("\r\n").slice(1)) {
         const colon = line.indexOf(":");
-        if (colon === -1) continue;
+        if (colon === -1) {
+            continue;
+        }
         const name = line.slice(0, colon).trim().toLowerCase();
         const value = line.slice(colon + 1).trim();
         headers.set(name, value);
@@ -103,7 +101,7 @@ export function parseResponse(buf: Uint8Array): ParseResponseResult {
         // Chunked decoding is handled by parseChunkedEncoding — here we just
         // return the raw body bytes for the caller to feed through that.
         body = buf.slice(bodyStart);
-    } else if (contentLengthHeader !== undefined) {
+    } else if (headers.has("content-length")) {
         const contentLength = Number(contentLengthHeader);
         body = buf.slice(bodyStart, bodyStart + contentLength);
     } else {
@@ -141,7 +139,9 @@ export async function* parseChunkedEncoding(stream: AsyncIterable<Uint8Array>): 
     let consumed = 0;
 
     const append = (chunk: Uint8Array): void => {
-        if (chunk.length === 0) return;
+        if (chunk.length === 0) {
+            return;
+        }
         const next = new Uint8Array(buffer.length + chunk.length);
         next.set(buffer, 0);
         next.set(chunk, buffer.length);
@@ -151,7 +151,9 @@ export async function* parseChunkedEncoding(stream: AsyncIterable<Uint8Array>): 
     // Find the next `CRLF` at or after `start`; return the index of the `CR`.
     const findCrlf = (start: number): number => {
         for (let i = start; i + 1 < buffer.length; i++) {
-            if (buffer[i] === 0x0d && buffer[i + 1] === 0x0a) return i;
+            if (buffer[i] === 0x0d && buffer[i + 1] === 0x0a) {
+                return i;
+            }
         }
         return -1;
     };
@@ -162,7 +164,9 @@ export async function* parseChunkedEncoding(stream: AsyncIterable<Uint8Array>): 
     const consumeTrailers = (start: number): number => {
         let lineStart = start;
         for (let i = start; i + 1 < buffer.length; i++) {
-            if (buffer[i] !== 0x0d || buffer[i + 1] !== 0x0a) continue;
+            if (buffer[i] !== 0x0d || buffer[i + 1] !== 0x0a) {
+                continue;
+            }
             if (i === lineStart) {
                 // Blank line — end of trailers.
                 return i + 2;
@@ -179,12 +183,14 @@ export async function* parseChunkedEncoding(stream: AsyncIterable<Uint8Array>): 
         drain:
         while (true) {
             const lineEnd = findCrlf(0);
-            if (lineEnd === -1) break drain; // Need more bytes for the size line.
+            if (lineEnd === -1) {
+                break drain; // Need more bytes for the size line.
+            }
 
             const sizeLine = decodeAscii(buffer, 0, lineEnd);
             // chunk-size [ ";" chunk-ext ] — hex digits then optional extension.
             // exec returns null (not undefined) when there is no match.
-            if (!/^[0-9a-fA-F]+(?:;[^\r\n]*)?$/.test(sizeLine)) {
+            if (!/^[0-9a-fA-F]+(?:;[^\r\n]*)?$/u.test(sizeLine)) {
                 throw new ChunkEncodingError(consumed);
             }
             const size = Number.parseInt(sizeLine, 16);
@@ -194,7 +200,9 @@ export async function* parseChunkedEncoding(stream: AsyncIterable<Uint8Array>): 
                 // Terminating chunk is just `0\r\n`; optional trailers + a final
                 // blank line follow. dataStart points past the `0\r\n`.
                 const trailerEnd = consumeTrailers(dataStart);
-                if (trailerEnd === -1) break drain; // Need more bytes for trailers.
+                if (trailerEnd === -1) {
+                    break drain; // Need more bytes for trailers.
+                }
                 consumed += trailerEnd;
                 return;
             }
@@ -202,7 +210,9 @@ export async function* parseChunkedEncoding(stream: AsyncIterable<Uint8Array>): 
             const dataEnd = dataStart + size;
             const chunkEnd = dataEnd + 2; // trailing CRLF after the chunk data
 
-            if (chunkEnd > buffer.length) break drain; // Need more data bytes.
+            if (chunkEnd > buffer.length) {
+                break drain; // Need more data bytes.
+            }
 
             // The two bytes after the chunk data must be the required CRLF.
             if (buffer[dataEnd] !== 0x0d || buffer[dataEnd + 1] !== 0x0a) {
@@ -223,10 +233,11 @@ export async function* parseChunkedEncoding(stream: AsyncIterable<Uint8Array>): 
 function decodeAscii(buf: Uint8Array, start: number, end: number): string {
     let out = "";
     for (let i = start; i < end; i++) {
-        out += String.fromCharCode(buf[i]!);
+        const byte = buf[i];
+        if (byte === undefined) {
+            throw new Error("decodeAscii: index out of bounds");
+        }
+        out += String.fromCodePoint(byte);
     }
     return out;
 }
-
-void assertNever;
-void InvalidResponseError;

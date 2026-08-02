@@ -13,6 +13,7 @@
 import {
     compression,
     DecompressionError,
+    type CompressionProvider,
     UnsupportedEncodingError,
 } from "@browsercore/compression";
 import { ContentEncodingError } from "./errors.js";
@@ -37,9 +38,13 @@ export function isSupportedContentEncoding(value: string): value is ContentEncod
  *
  * @throws {ContentEncodingError} on an unsupported value or corrupt stream.
  */
-export function decompressBody(body: Uint8Array, encoding: string): Uint8Array {
+export function decompressBody(
+    body: Uint8Array,
+    encoding: string,
+    provider: CompressionProvider = compression,
+): Uint8Array {
     try {
-        return compression.decompress(body, encoding);
+        return provider.decompress(body, encoding);
     } catch (err) {
         // The provider throws its own typed errors; re-wrap as http1's
         // ContentEncodingError so this package's public contract is stable.
@@ -49,6 +54,8 @@ export function decompressBody(body: Uint8Array, encoding: string): Uint8Array {
         if (err instanceof DecompressionError) {
             throw new ContentEncodingError(err.encoding, { cause: err });
         }
+        // Anything else is unexpected from a well-behaved provider — let it
+        // propagate rather than swallowing it behind a ContentEncodingError.
         throw err;
     }
 }

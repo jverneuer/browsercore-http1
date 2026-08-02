@@ -27,109 +27,127 @@ export class Http1ConnectionImpl implements Http1Connection {
      * Incoming bytes not yet consumed by a parsed response. Drained by
      * `bytesConsumed` after every parse — this is what makes keep-alive work.
      */
-    private _buffer: Uint8Array = new Uint8Array(0);
+    private buffer: Uint8Array = new Uint8Array(0);
 
     /** Resolvers awaiting the next `data` event from the transport. */
-    private _dataWaiters: Array<(data: Uint8Array) => void> = [];
+    private dataWaiters: Array<(data: Uint8Array) => void> = [];
 
     /** Resolvers awaiting connection close (used by `close()` to drain in-flight). */
-    private _closeWaiters: Array<() => void> = [];
+    private closeWaiters: Array<() => void> = [];
 
     /** Set once the transport has closed unexpectedly (remote close / error). */
-    private _transportClosed = false;
+    private transportClosed = false;
+
+    /**
+     * Number of requests currently in flight. Held as a field rather than
+     * derived from `state` because `close()` transitions the discriminant to
+     * `"closing"` while requests are still pending — deriving the count from
+     * the discriminant would read 0 in that state and the final request's
+     * finally block would never wake the draining close waiter.
+     */
+    private pending = 0;
 
     public constructor(
         id: Http1ConnectionId,
-        private readonly _options: Http1Options,
+        private readonly options: Http1Options,
     ) {
         this.id = id;
-        this._options.transport.on("data", (chunk: Uint8Array): void => {
-            this._appendBuffer(chunk);
-            const waiter = this._dataWaiters.shift();
+        this.options.transport.on("data", (chunk: Uint8Array): void => {
+            this.appendBuffer(chunk);
+            const waiter = this.dataWaiters.shift();
             if (waiter !== undefined) {
                 waiter(chunk);
             }
         });
-        this._options.transport.on("close", (): void => {
-            this._transportClosed = true;
+        this.options.transport.on("close", (): void => {
+            this.transportClosed = true;
             // Wake any pending reads so they can observe the closed transport.
-            while (this._dataWaiters.length > 0) {
-                const waiter = this._dataWaiters.shift();
-                if (waiter !== undefined) waiter(new Uint8Array(0));
+            while (this.dataWaiters.length > 0) {
+                const waiter = this.dataWaiters.shift();
+                if (waiter !== undefined) {
+                    waiter(new Uint8Array(0));
+                }
             }
         });
     }
 
     public async request(req: HttpRequest): Promise<HttpResponse> {
-        this._ensureOpen();
+        this.ensureOpen();
 
-        this._transition({ state: "in_flight", pending: this._pendingCount() + 1 });
+        this.pending += 1;
+        this.transition({ state: "in_flight", pending: this.pending });
 
         try {
             // Cookie seam (optional): inject request cookies before serializing.
-            const interceptor = this._options.cookieInterceptor;
+            const interceptor = this.options.cookieInterceptor;
             let wireReq = req;
             if (interceptor?.addCookies !== undefined) {
-                wireReq = this._injectCookies(req, interceptor.addCookies(this._cookieUrl(req)));
+                wireReq = this.injectCookies(req, interceptor.addCookies(this.cookieUrl(req)));
             }
             const wire = serializeRequest(wireReq);
-            await this._options.transport.write(wire);
-            const response = await this._readResponse();
+            await this.options.transport.write(wire);
+            const response = await this.readResponse();
             // Cookie seam (optional): collect response Set-Cookie headers.
             if (interceptor?.storeCookies !== undefined) {
-                interceptor.storeCookies(this._cookieUrl(wireReq), collectSetCookie(response.headers));
+                interceptor.storeCookies(this.cookieUrl(wireReq), collectSetCookie(response.headers));
             }
             return response;
         } finally {
-            const pending = this._pendingCount() - 1;
-            if (pending === 0) {
-                this._transition({ state: "idle" });
-                if (this._closeWaiters.length > 0) {
-                    for (const waiter of this._closeWaiters) waiter();
-                    this._closeWaiters = [];
+            this.pending -= 1;
+            if (this.pending === 0) {
+                this.transition({ state: "idle" });
+                if (this.closeWaiters.length > 0) {
+                    for (const waiter of this.closeWaiters) {
+                        waiter();
+                    }
+                    this.closeWaiters = [];
                 }
             } else {
-                this._transition({ state: "in_flight", pending });
+                this.transition({ state: "in_flight", pending: this.pending });
             }
         }
     }
 
     public async close(reason?: Http1CloseReason): Promise<void> {
         const effectiveReason: Http1CloseReason = reason ?? { kind: "client_close" };
-        if (this._isClosedOrClosing()) return;
+        if (this.isClosedOrClosing()) {
+            return;
+        }
 
         // If requests are in flight, wait for them to drain before closing.
-        if (this._pendingCount() > 0) {
-            this._transition({ state: "closing" });
+        if (this.pending > 0) {
+            this.transition({ state: "closing" });
             await new Promise<void>((resolve) => {
-                this._closeWaiters.push(resolve);
+                this.closeWaiters.push(resolve);
             });
         }
 
-        if (this._isClosedOrClosing()) return;
-        this._transition({ state: "closed", reason: effectiveReason });
-        await this._options.transport.close();
+        if (this.isClosedOrClosing()) {
+            return;
+        }
+        this.transition({ state: "closed", reason: effectiveReason });
+        await this.options.transport.close();
     }
 
-    private _isClosedOrClosing(): boolean {
+    private isClosedOrClosing(): boolean {
         const s = this.state.state;
         return s === "closed" || s === "closing";
     }
 
     /** Read bytes from the transport until a complete response is available. */
-    private async _readResponse(): Promise<HttpResponse> {
+    private async readResponse(): Promise<HttpResponse> {
         while (true) {
-            const parsed = await this._tryParse();
+            const parsed = await this.tryParse();
             if (parsed !== undefined) {
                 return parsed;
             }
-            const chunk = await this._readChunk();
+            const chunk = await this.readChunk();
             if (chunk === undefined) {
                 // Transport closed mid-response — drain what we have.
-                if (this._buffer.length > 0) {
-                    const { response } = parseResponse(this._buffer);
-                    this._buffer = this._buffer.slice(0, 0);
-                    return this._decodeBody(response);
+                if (this.buffer.length > 0) {
+                    const { response } = parseResponse(this.buffer);
+                    this.buffer = this.buffer.slice(0, 0);
+                    return this.decodeBody(response);
                 }
                 throw new Error("transport closed before response received");
             }
@@ -143,31 +161,41 @@ export class Http1ConnectionImpl implements Http1Connection {
      * Attempt to parse a complete response from the current buffer.
      * Returns `undefined` if more bytes are needed.
      */
-    private async _tryParse(): Promise<HttpResponse | undefined> {
-        const headerEnd = findHeaderEnd(this._buffer);
-        if (headerEnd === -1) return undefined;
+    private async tryParse(): Promise<HttpResponse | undefined> {
+        const headerEnd = findHeaderEnd(this.buffer);
+        if (headerEnd === -1) {
+            return undefined;
+        }
 
         const bodyStart = headerEnd + 4;
-        const headerText = decodeAscii(this._buffer, 0, headerEnd);
+        const headerText = decodeAscii(this.buffer, 0, headerEnd);
 
         const contentLength = extractContentLength(headerText);
         const isChunked = isChunkedEncoding(headerText);
 
         if (contentLength !== undefined) {
             const totalLength = bodyStart + contentLength;
-            if (this._buffer.length < totalLength) return undefined;
-            return await this._parseAndDrain(totalLength);
+            if (this.buffer.length < totalLength) {
+                return undefined;
+            }
+            const parsed = await this.parseAndDrain(totalLength);
+            return parsed;
         }
 
         if (isChunked) {
-            const bodyEnd = findChunkedBodyEnd(this._buffer, bodyStart);
-            if (bodyEnd === -1) return undefined;
-            return await this._parseAndDrain(bodyEnd);
+            const bodyEnd = findChunkedBodyEnd(this.buffer, bodyStart);
+            if (bodyEnd === -1) {
+                return undefined;
+            }
+            const parsed = await this.parseAndDrain(bodyEnd);
+            return parsed;
         }
 
-        // No content-length and not chunked — body runs until transport close.
-        if (!this._transportClosed) return undefined;
-        return await this._parseAndDrain(this._buffer.length);
+        // No content-length and not chunked — the body runs until the transport
+        // closes, so its boundary can't be determined from headers alone. Return
+        // undefined and let `readResponse` observe the close (via `readChunk`
+        // resolving `undefined`) and drain whatever the buffer holds.
+        return undefined;
     }
 
     /**
@@ -176,10 +204,10 @@ export class Http1ConnectionImpl implements Http1Connection {
      * order: transfer-encoding first (it's the outer framing), then
      * content-encoding on the reassembled bytes.
      */
-    private async _parseAndDrain(totalLength: number): Promise<HttpResponse> {
-        const { response, bytesConsumed } = parseResponse(this._buffer.slice(0, totalLength));
-        this._buffer = this._buffer.slice(bytesConsumed);
-        return this._decodeBody(response);
+    private parseAndDrain(totalLength: number): Promise<HttpResponse> {
+        const { response, bytesConsumed } = parseResponse(this.buffer.slice(0, totalLength));
+        this.buffer = this.buffer.slice(bytesConsumed);
+        return this.decodeBody(response);
     }
 
     /**
@@ -187,7 +215,7 @@ export class Http1ConnectionImpl implements Http1Connection {
      * decompression to a parsed response's body. `parseResponse` is kept pure
      * (wire-format only); this is where protocol semantics get applied.
      */
-    private async _decodeBody(response: HttpResponse): Promise<HttpResponse> {
+    private async decodeBody(response: HttpResponse): Promise<HttpResponse> {
         const headers = response.headers;
         let body = response.body;
 
@@ -210,11 +238,11 @@ export class Http1ConnectionImpl implements Http1Connection {
     }
 
     /** Read one chunk from the transport, or `undefined` once it has closed. */
-    private async _readChunk(): Promise<Uint8Array | undefined> {
-        return new Promise<Uint8Array | undefined>((resolve) => {
-            this._dataWaiters.push((chunk: Uint8Array) => {
-                if (this._transportClosed && chunk.length === 0) {
-                    resolve(undefined);
+    private readChunk(): Promise<Uint8Array | undefined> {
+        return new Promise((resolve: (value?: Uint8Array) => void) => {
+            this.dataWaiters.push((chunk: Uint8Array) => {
+                if (this.transportClosed && chunk.length === 0) {
+                    resolve();
                 } else {
                     resolve(chunk);
                 }
@@ -222,15 +250,17 @@ export class Http1ConnectionImpl implements Http1Connection {
         });
     }
 
-    private _appendBuffer(chunk: Uint8Array): void {
-        if (chunk.length === 0) return;
-        const next = new Uint8Array(this._buffer.length + chunk.length);
-        next.set(this._buffer, 0);
-        next.set(chunk, this._buffer.length);
-        this._buffer = next;
+    private appendBuffer(chunk: Uint8Array): void {
+        if (chunk.length === 0) {
+            return;
+        }
+        const next = new Uint8Array(this.buffer.length + chunk.length);
+        next.set(this.buffer, 0);
+        next.set(chunk, this.buffer.length);
+        this.buffer = next;
     }
 
-    private _ensureOpen(): void {
+    private ensureOpen(): void {
         const s = this.state;
         switch (s.state) {
             case "idle":
@@ -245,15 +275,8 @@ export class Http1ConnectionImpl implements Http1Connection {
         }
     }
 
-    private _transition(next: Http1ConnectionState): void {
+    private transition(next: Http1ConnectionState): void {
         this.state = next;
-    }
-
-    /** Derive the current pending count from the state. */
-    private _pendingCount(): number {
-        const s = this.state;
-        if (s.state === "in_flight") return s.pending;
-        return 0;
     }
 
     /**
@@ -265,7 +288,7 @@ export class Http1ConnectionImpl implements Http1Connection {
      * (this stack is built for TLS). The seam is optional and only invoked when
      * a caller supplies an interceptor.
      */
-    private _cookieUrl(req: HttpRequest): { host: string; path: string; protocol: string } {
+    private cookieUrl(req: HttpRequest): { host: string; path: string; protocol: string } {
         const host = req.headers.get("host") ?? "";
         return {
             host: host.split(":")[0] ?? host,
@@ -278,17 +301,20 @@ export class Http1ConnectionImpl implements Http1Connection {
      * Merge cookies returned by the interceptor into a request. A bare string
      * is treated as the `Cookie` header value; a map is merged name->value.
      */
-    private _injectCookies(
+    private injectCookies(
         req: HttpRequest,
         cookies: Map<string, string> | string,
     ): HttpRequest {
         if (typeof cookies === "string") {
-            if (cookies === "") return req;
-            const headers = new Map(req.headers);
-            headers.set("cookie", cookies);
+            if (cookies === "") {
+                return req;
+            }
+            const headers = new Map([...req.headers, ["cookie", cookies]]);
             return { ...req, headers };
         }
-        if (cookies.size === 0) return req;
+        if (cookies.size === 0) {
+            return req;
+        }
         const headers = new Map(req.headers);
         for (const [name, value] of cookies) {
             headers.set(name, value);
@@ -303,9 +329,9 @@ export class Http1ConnectionImpl implements Http1Connection {
  * The transport is assumed to be already connected — this function only wraps
  * it with the HTTP/1.1 protocol state machine.
  */
-export async function connectHttp1(options: Http1Options): Promise<Http1Connection> {
+export function connectHttp1(options: Http1Options): Promise<Http1Connection> {
     const id = createId("http1");
-    return new Http1ConnectionImpl(id, options);
+    return Promise.resolve(new Http1ConnectionImpl(id, options));
 }
 
 // --- Byte-level helpers --------------------------------------------------
@@ -329,23 +355,31 @@ function findHeaderEnd(buf: Uint8Array): number {
 function decodeAscii(buf: Uint8Array, start: number, end: number): string {
     let out = "";
     for (let i = start; i < end; i++) {
-        out += String.fromCharCode(buf[i]!);
+        const byte = buf[i];
+        if (byte === undefined) {
+            throw new Error("decodeAscii: index out of bounds");
+        }
+        out += String.fromCodePoint(byte);
     }
     return out;
 }
 
 /** Extract the `content-length` header value, or `undefined` if absent. */
 function extractContentLength(headerText: string): number | undefined {
-    const match = /(?:^|\n)content-length:\s*(\d+)\r?/i.exec(headerText);
-    if (match === null) return undefined;
+    const match = /(?:^|\n)content-length:\s*(\d+)\r?/iu.exec(headerText);
+    if (match === null) {
+        return undefined;
+    }
     const value = match[1];
     return value === undefined ? undefined : Number(value);
 }
 
 /** Whether the response uses chunked transfer-encoding. */
 function isChunkedEncoding(headerText: string): boolean {
-    const match = /(?:^|\n)transfer-encoding:\s*([^\r\n]+)/i.exec(headerText);
-    if (match === null) return false;
+    const match = /(?:^|\n)transfer-encoding:\s*([^\r\n]+)/iu.exec(headerText);
+    if (match === null) {
+        return false;
+    }
     const value = match[1];
     return value !== undefined && value.toLowerCase().includes("chunked");
 }
@@ -365,11 +399,15 @@ function findChunkedBodyEnd(buf: Uint8Array, bodyStart: number): number {
                 break;
             }
         }
-        if (lineEnd === -1) return -1;
+        if (lineEnd === -1) {
+            return -1;
+        }
 
         const sizeLine = decodeAscii(buf, offset, lineEnd);
         // exec returns null (not undefined) when there is no match.
-        if (!/^[0-9a-fA-F]+(?:;[^\r\n]*)?$/.test(sizeLine)) return -1;
+        if (!/^[0-9a-fA-F]+(?:;[^\r\n]*)?$/u.test(sizeLine)) {
+            return -1;
+        }
 
         const size = Number.parseInt(sizeLine, 16);
         const dataStart = lineEnd + 2;
@@ -387,8 +425,12 @@ function findChunkedBodyEnd(buf: Uint8Array, bodyStart: number): number {
         const dataEnd = dataStart + size;
         const chunkEnd = dataEnd + 2; // trailing \r\n after chunk data
 
-        if (chunkEnd > buf.length) return -1;
-        if (buf[dataEnd] !== 0x0d || buf[dataEnd + 1] !== 0x0a) return -1;
+        if (chunkEnd > buf.length) {
+            return -1;
+        }
+        if (buf[dataEnd] !== 0x0d || buf[dataEnd + 1] !== 0x0a) {
+            return -1;
+        }
 
         offset = chunkEnd;
     }
@@ -407,8 +449,12 @@ function findChunkedBodyEnd(buf: Uint8Array, bodyStart: number): number {
 function consumeTrailers(buf: Uint8Array, start: number): number {
     let lineStart = start;
     for (let i = start; i + 1 < buf.length; i++) {
-        if (buf[i] !== 0x0d || buf[i + 1] !== 0x0a) continue;
-        if (i === lineStart) return i + 2; // blank line — end of trailers
+        if (buf[i] !== 0x0d || buf[i + 1] !== 0x0a) {
+            continue;
+        }
+        if (i === lineStart) {
+            return i + 2; // blank line — end of trailers
+        }
         lineStart = i + 2;
     }
     return -1;
@@ -426,15 +472,28 @@ function describeCloseReason(reason: Http1CloseReason): string {
         case "redirect_jump":
             return `redirect to ${reason.to}`;
         default:
-            assertNever(reason);
+            return assertNever(reason);
     }
 }
 
 // --- Body decoding helpers -----------------------------------------------
 
 /** Yield the bytes of a single buffer as an `AsyncIterable` (one chunk). */
-async function* chunkIterable(buf: Uint8Array): AsyncGenerator<Uint8Array> {
-    if (buf.length > 0) yield buf;
+function chunkIterable(buf: Uint8Array): AsyncIterable<Uint8Array> {
+    let yielded = false;
+    return {
+        [Symbol.asyncIterator]() {
+            return {
+                next(): Promise<IteratorResult<Uint8Array>> {
+                    if (buf.length === 0 || yielded) {
+                        return Promise.resolve({ value: undefined, done: true });
+                    }
+                    yielded = true;
+                    return Promise.resolve({ value: buf, done: false });
+                },
+            };
+        },
+    };
 }
 
 /** Collect all chunks of an async byte stream into one contiguous buffer. */
@@ -458,8 +517,9 @@ async function materialize(stream: AsyncIterable<Uint8Array>): Promise<Uint8Arra
 function collectSetCookie(headers: ReadonlyMap<string, string>): string[] {
     const out: string[] = [];
     for (const [name, value] of headers) {
-        if (name === "set-cookie") out.push(value);
+        if (name === "set-cookie") {
+            out.push(value);
+        }
     }
     return out;
 }
-

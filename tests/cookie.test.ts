@@ -108,6 +108,54 @@ describe("cookie interceptor seam", () => {
         expect(stored[0]?.cookies).toEqual(["sid=123; Path=/"]);
     });
 
+    it("injects multiple cookies when addCookies returns a Map", async () => {
+        const transport = new FakeTransport();
+        transport.queueResponse(rawResponse(200, { "content-length": "0" }, ""));
+        const conn = await connectHttp1({
+            transport,
+            cookieInterceptor: {
+                addCookies: () => new Map<string, string>([
+                    ["session", "abc"],
+                    ["csrf", "token"],
+                ]),
+            },
+        });
+        const req: HttpRequest = {
+            method: "GET",
+            url: "/",
+            headers: new Map([["host", "example.com"]]),
+            body: { kind: "empty" },
+        };
+        await conn.request(req);
+        await conn.close();
+        const wire = new TextDecoder().decode(transport.written[0]!);
+        expect(wire).toContain("session: abc\r\n");
+        expect(wire).toContain("csrf: token\r\n");
+    });
+
+    it("passes through unchanged when addCookies returns an empty Map", async () => {
+        const transport = new FakeTransport();
+        transport.queueResponse(rawResponse(200, { "content-length": "0" }, ""));
+        const conn = await connectHttp1({
+            transport,
+            cookieInterceptor: {
+                addCookies: () => new Map<string, string>(),
+            },
+        });
+        const req: HttpRequest = {
+            method: "GET",
+            url: "/",
+            headers: new Map([["host", "example.com"]]),
+            body: { kind: "empty" },
+        };
+        await conn.request(req);
+        await conn.close();
+        const wire = new TextDecoder().decode(transport.written[0]!);
+        // No cookie headers were injected.
+        expect(wire).not.toContain("session");
+        expect(wire).not.toContain("csrf");
+    });
+
     it("passes through unchanged when no interceptor is configured", async () => {
         const transport = new FakeTransport();
         transport.queueResponse(rawResponse(200, { "content-length": "2" }, "ok"));

@@ -54,8 +54,7 @@ function requestTarget(url: string): string {
  * the `host` header per the status code.
  */
 function buildRedirectRequest(req: HttpRequest, status: number, nextUrl: string): HttpRequest {
-    const headers = new Map(req.headers);
-    headers.set("host", new URL(nextUrl).host);
+    const headers = new Map([...req.headers, ["host", new URL(nextUrl).host]]);
     if (status === 303) {
         // See Other: drop the body and any body-framing headers, switch to GET.
         headers.delete("content-length");

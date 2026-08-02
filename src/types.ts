@@ -22,11 +22,17 @@ export type HttpMethod =
     | "TRACE"
     | "CONNECT";
 
-/** What kind of body a request carries — makes the absent body unrepresentable. */
+/**
+ * What kind of body a request carries — makes the absent body unrepresentable.
+ *
+ * Streaming request bodies are not implemented (no PLAN step); the union is
+ * closed at `empty` | `bytes`. The `default: assertNever` guard in
+ * `serializeRequest` keeps this honest — adding a variant forces a compile error
+ * until handled.
+ */
 export type HttpBodyKind =
     | { readonly kind: "empty" }
-    | { readonly kind: "bytes"; readonly data: Uint8Array }
-    | { readonly kind: "stream"; readonly stream: AsyncIterable<Uint8Array> };
+    | { readonly kind: "bytes"; readonly data: Uint8Array };
 
 /** A fully-serializable HTTP/1.1 request. */
 export interface HttpRequest {

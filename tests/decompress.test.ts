@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { gzipSync, deflateSync, deflateRawSync, brotliCompressSync, brotliDecompressSync } from "node:zlib";
-import { decompressBody } from "../src/decompress.js";
+import type { CompressionProvider } from "@browsercore/compression";
+import { decompressBody, isSupportedContentEncoding } from "../src/decompress.js";
 import { ContentEncodingError } from "../src/errors.js";
 
 const payload = "the quick brown fox jumps over the lazy dog.".repeat(16);
@@ -55,5 +56,33 @@ describe("decompressBody", () => {
             expect(err).toBeInstanceOf(ContentEncodingError);
             expect((err as ContentEncodingError).encoding).toBe("bzip2");
         }
+    });
+});
+
+describe("isSupportedContentEncoding", () => {
+    it("accepts the encodings we decode", () => {
+        expect(isSupportedContentEncoding("gzip")).toBe(true);
+        expect(isSupportedContentEncoding("deflate")).toBe(true);
+        expect(isSupportedContentEncoding("br")).toBe(true);
+    });
+
+    it("rejects anything else", () => {
+        expect(isSupportedContentEncoding("zstd")).toBe(false);
+        expect(isSupportedContentEncoding("")).toBe(false);
+        expect(isSupportedContentEncoding("GZIP")).toBe(false);
+    });
+});
+
+describe("decompressBody provider seam", () => {
+    it("re-throws an error that is not a compression typed error", () => {
+        // A misbehaving provider can throw anything — http1 must not swallow it
+        // behind a ContentEncodingError, or the real failure is hidden.
+        const boom = new Error("provider crashed");
+        const fakeProvider = {
+            decompress: () => {
+                throw boom;
+            },
+        } as unknown as CompressionProvider;
+        expect(() => decompressBody(enc(payload), "gzip", fakeProvider)).toThrow("provider crashed");
     });
 });
