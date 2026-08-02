@@ -25,9 +25,6 @@
     "rootDir": "src",
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
-  "references": [
-    { "path": "../transport" }
-  ],
   "include": ["src/**/*.ts"],
   "exclude": ["tests", "dist"]
 }
