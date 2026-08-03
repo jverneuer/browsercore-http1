@@ -8,6 +8,7 @@
 import type { HttpRequest, HttpResponse } from "./types.js";
 import { InvalidResponseError, ChunkEncodingError } from "./errors.js";
 import { assertNever, decodeAscii, consumeTrailers } from "./utils.js";
+import { extractContentLength } from "./connection-helpers.js";
 
 /** The start-line of an HTTP/1.1 message — discriminated by direction. */
 export type StartLine =
@@ -85,6 +86,11 @@ export function parseResponse(buf: Uint8Array): ParseResponseResult {
         throw new InvalidResponseError(text.slice(0, 120));
     }
     const headers = new Map<string, string>();
+    // Set-Cookie is the one standard header that may legitimately repeat (RFC
+    // 6265 §3.1); a Map<string,string> collapses duplicates to the last value.
+    // Collect every line into a parallel array so cookie jars receive the full
+    // set, while the single-value Map shape fetch consumes is left intact.
+    const setCookies: string[] = [];
     for (const line of headerSection.split("\r\n").slice(1)) {
         const colon = line.indexOf(":");
         if (colon === -1) {
@@ -93,25 +99,35 @@ export function parseResponse(buf: Uint8Array): ParseResponseResult {
         const name = line.slice(0, colon).trim().toLowerCase();
         const value = line.slice(colon + 1).trim();
         headers.set(name, value);
+        if (name === "set-cookie") {
+            setCookies.push(value);
+        }
     }
-    const contentLengthHeader = headers.get("content-length");
     const transferEncoding = headers.get("transfer-encoding");
+    // Authoritative content-length extraction — shared with the connection's
+    // framing logic (see extractContentLength) so the two sites can never
+    // disagree on a malformed or duplicate value (RFC 7230 §3.3.2). It throws
+    // InvalidResponseError on non-numeric / duplicate values, which guarantees
+    // bytesConsumed below is never derived from a NaN length.
+    const contentLength = extractContentLength(headerSection);
     let body: Uint8Array;
     if (transferEncoding !== undefined && transferEncoding.includes("chunked")) {
         // Chunked decoding is handled by parseChunkedEncoding — here we just
         // return the raw body bytes for the caller to feed through that.
         body = buf.slice(bodyStart);
-    } else if (headers.has("content-length")) {
-        const contentLength = Number(contentLengthHeader);
-        body = buf.slice(bodyStart, bodyStart + contentLength);
-    } else {
+    } else if (contentLength === undefined) {
+        // No content-length and not chunked — the body runs to the end of the
+        // buffer; the connection drains it once the transport closes.
         body = buf.slice(bodyStart);
+    } else {
+        body = buf.slice(bodyStart, bodyStart + contentLength);
     }
     const response: HttpResponse = {
         statusCode,
         statusText,
         headers,
         body,
+        setCookie: setCookies,
     };
     const bytesConsumed = bodyStart + body.length;
     return { response, bytesConsumed };

@@ -34,6 +34,7 @@ function res(status: number, location?: string, body = ""): HttpResponse {
         statusText: "",
         headers,
         body: new TextEncoder().encode(body),
+        setCookie: [],
     };
 }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Http1CloseReason } from "../src/types.js";
+import { InvalidResponseError } from "../src/errors.js";
 import {
     findHeaderEnd,
     extractContentLength,
@@ -55,16 +56,29 @@ describe("extractContentLength", () => {
         expect(extractContentLength("HTTP/1.1 200 OK\r\ncontent-type: text/plain\r\n")).toBeUndefined();
     });
 
-    it("returns undefined for a non-numeric value", () => {
-        // The regex only matches digits — anything else is treated as absent
-        // rather than producing NaN downstream.
-        expect(extractContentLength("HTTP/1.1 200 OK\r\ncontent-length: abc\r\n")).toBeUndefined();
+    it("rejects a non-numeric value with InvalidResponseError", () => {
+        // A non-numeric value would yield NaN via Number() and corrupt the
+        // downstream byte count — reject it rather than treating it as absent.
+        expect(() =>
+            extractContentLength("HTTP/1.1 200 OK\r\ncontent-length: abc\r\n"),
+        ).toThrow(InvalidResponseError);
+    });
+
+    it("rejects duplicate content-length headers with InvalidResponseError", () => {
+        // RFC 7230 §3.3.2: disagreeing duplicates are malformed. Reject any
+        // duplicate so the connection's framing and parseResponse's draining
+        // can never pick different lengths.
+        expect(() =>
+            extractContentLength(
+                "HTTP/1.1 200 OK\r\ncontent-length: 5\r\ncontent-length: 6\r\n",
+            ),
+        ).toThrow(InvalidResponseError);
     });
 
     it("matches without a trailing CRLF (truncated header section)", () => {
         // The connection passes headerText sliced at the terminator offset, so
-        // the final header often has no trailing \r\n. The \r? in the regex is
-        // optional by design.
+        // the final header often has no trailing \r\n; the extractor tolerates
+        // the missing terminator.
         expect(extractContentLength("HTTP/1.1 200 OK\r\ncontent-length: 11")).toBe(11);
     });
 });
@@ -200,20 +214,19 @@ describe("materialize", () => {
 });
 
 describe("collectSetCookie", () => {
-    // NOTE: parseResponse stores headers in a Map<string,string>, so duplicate
-    // header field names collapse to their last value. In practice this means
-    // collectSetCookie observes at most one "set-cookie" entry per response —
-    // a real limitation for servers that send multiple Set-Cookie headers.
-    it("collects a set-cookie value, skipping unrelated headers", () => {
-        const headers = new Map<string, string>([
-            ["content-type", "text/html"],
-            ["set-cookie", "a=1"],
-        ]);
-        expect(collectSetCookie(headers)).toEqual(["a=1"]);
+    // collectSetCookie reads the response's dedicated `setCookie` array
+    // (populated by parseResponse from every set-cookie line), so multiple
+    // Set-Cookie headers on one response are preserved per RFC 6265 §3.1
+    // rather than collapsed to the last value.
+    it("returns every set-cookie value from the parsed response array", () => {
+        expect(collectSetCookie(["a=1", "b=2"])).toEqual(["a=1", "b=2"]);
+    });
+
+    it("returns a single set-cookie value unchanged", () => {
+        expect(collectSetCookie(["sid=42"])).toEqual(["sid=42"]);
     });
 
     it("returns an empty array when there are no set-cookie headers", () => {
-        const headers = new Map<string, string>([["content-type", "text/html"]]);
-        expect(collectSetCookie(headers)).toEqual([]);
+        expect(collectSetCookie([])).toEqual([]);
     });
 });

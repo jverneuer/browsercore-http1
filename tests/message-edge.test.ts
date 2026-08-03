@@ -96,21 +96,39 @@ describe("parseResponse header parsing", () => {
         expect(response.headers.has("Content-Type")).toBe(false);
     });
 
-    it("keeps the last value when duplicate headers are present", () => {
-        // A Map keyed on the lowercased name — later lines overwrite earlier.
+    it("keeps the last value for single-valued duplicate headers", () => {
+        // Single-valued headers stay in a Map keyed on the lowercased name, so
+        // later lines overwrite earlier. Set-Cookie is the one exception: it is
+        // collected into a dedicated array (see the Set-Cookie tests below) so
+        // RFC 6265 §3.1 multiple values are preserved.
         const raw = "HTTP/1.1 200 OK\r\nx-dup: one\r\nx-dup: two\r\n\r\n";
         const { response } = parseResponse(enc(raw));
         expect(response.headers.get("x-dup")).toBe("two");
     });
 
-    it("collapses duplicate Set-Cookie headers to the last value", () => {
-        // KNOWN LIMITATION: headers are stored in a Map<string,string>, which
-        // can hold only one entry per name. RFC 6265 permits multiple
-        // Set-Cookie headers in a single response, but parseResponse keeps
-        // only the last — silently dropping the earlier cookie(s).
+    it("preserves every Set-Cookie header (RFC 6265 §3.1)", () => {
+        // Set-Cookie may legitimately repeat in a single response. Each line is
+        // captured on the response's dedicated `setCookie` array in wire order,
+        // so a cookie jar receives the full set rather than just the last value.
         const raw = "HTTP/1.1 200 OK\r\nset-cookie: a=1\r\nset-cookie: b=2\r\n\r\n";
         const { response } = parseResponse(enc(raw));
+        expect(response.setCookie).toEqual(["a=1", "b=2"]);
+        // The single-value Map retains the last value for fetch / generic
+        // header consumers — no downstream shape change.
         expect(response.headers.get("set-cookie")).toBe("b=2");
+    });
+
+    it("captures all of three Set-Cookie headers", () => {
+        const raw =
+            "HTTP/1.1 200 OK\r\nset-cookie: sid=1\r\nset-cookie: theme=dark\r\nset-cookie: lang=en\r\n\r\n";
+        const { response } = parseResponse(enc(raw));
+        expect(response.setCookie).toEqual(["sid=1", "theme=dark", "lang=en"]);
+    });
+
+    it("exposes an empty setCookie array when there are no Set-Cookie headers", () => {
+        const raw = "HTTP/1.1 200 OK\r\ncontent-type: text/plain\r\n\r\n";
+        const { response } = parseResponse(enc(raw));
+        expect(response.setCookie).toEqual([]);
     });
 
     it("returns the raw chunked body bytes without decoding", () => {
@@ -169,6 +187,36 @@ describe("parseResponse header parsing", () => {
             expect(err).toBeInstanceOf(InvalidResponseError);
             expect((err as InvalidResponseError).rawPreview).toHaveLength(120);
         }
+    });
+});
+
+describe("parseResponse content-length framing (RFC 7230 §3.3.2)", () => {
+    // Centralized extraction is shared with the connection's framing logic
+    // (extractContentLength). These cases pin that malformed / duplicate
+    // content-length is rejected at BOTH sites rather than silently corrupting
+    // the keep-alive buffer (NaN drain) or diverging first- vs last-wins.
+    it("rejects a non-numeric content-length with InvalidResponseError", () => {
+        // Previously `Number("abc")` → NaN → empty body slice → bytesConsumed
+        // drained only the header, misaligning the next pipelined response.
+        const raw = "HTTP/1.1 200 OK\r\ncontent-length: abc\r\n\r\nhello";
+        expect(() => parseResponse(enc(raw))).toThrow(InvalidResponseError);
+    });
+
+    it("rejects duplicate content-length headers with InvalidResponseError", () => {
+        // Previously the connection framed on the first (5) while parseResponse
+        // drained on the last (6) — a one-byte misalignment that corrupts every
+        // subsequent message on the connection.
+        const raw = "HTTP/1.1 200 OK\r\ncontent-length: 5\r\ncontent-length: 6\r\n\r\nhello";
+        expect(() => parseResponse(enc(raw))).toThrow(InvalidResponseError);
+    });
+
+    it("frames a single valid content-length exactly (regression guard)", () => {
+        // Sanity check that legitimate content-length still frames precisely:
+        // body sliced to the declared length, bytesConsumed drains it all.
+        const raw = "HTTP/1.1 200 OK\r\ncontent-length: 5\r\n\r\nhello";
+        const { response, bytesConsumed } = parseResponse(enc(raw));
+        expect(dec(response.body)).toBe("hello");
+        expect(bytesConsumed).toBe(raw.length);
     });
 });
 

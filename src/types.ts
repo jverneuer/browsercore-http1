@@ -49,6 +49,16 @@ export interface HttpResponse {
     readonly statusText: string;
     readonly headers: ReadonlyMap<string, string>;
     readonly body: Uint8Array;
+    /**
+     * Every `set-cookie` header value in wire order (RFC 6265 §3.1 permits
+     * multiple in a single response).
+     *
+     * Kept parallel to `headers` rather than inside it: a `Map<string,string>`
+     * can hold only one entry per name, so `headers.get("set-cookie")` retains
+     * the last value (the shape single-value consumers like fetch expect) while
+     * this array preserves the complete set for cookie jars.
+     */
+    readonly setCookie: string[];
 }
 
 /** Why an HTTP/1.1 connection was closed. */

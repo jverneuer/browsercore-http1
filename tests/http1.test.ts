@@ -60,6 +60,7 @@ describe("parseResponse", () => {
                 ["content-length", "5"],
             ]),
             body: new TextEncoder().encode("hello"),
+            setCookie: [],
         });
         expect(bytesConsumed).toBe(raw.length);
     });

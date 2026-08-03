@@ -100,7 +100,7 @@ export class Http1ConnectionImpl implements Http1Connection {
             const response = await this.readResponse();
             // Cookie seam (optional): collect response Set-Cookie headers.
             if (interceptor?.storeCookies !== undefined) {
-                interceptor.storeCookies(this.cookieUrl(wireReq), collectSetCookie(response.headers));
+                interceptor.storeCookies(this.cookieUrl(wireReq), collectSetCookie(response.setCookie));
             }
             return response;
         } finally {

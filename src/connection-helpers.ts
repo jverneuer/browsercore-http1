@@ -8,6 +8,7 @@
  */
 
 import type { Http1CloseReason } from "./types.js";
+import { InvalidResponseError } from "./errors.js";
 import { assertNever, decodeAscii, consumeTrailers } from "./utils.js";
 
 /** Find the offset of the `\r\n\r\n` header terminator, or -1 if not present. */
@@ -25,14 +26,59 @@ export function findHeaderEnd(buf: Uint8Array): number {
     return -1;
 }
 
-/** Extract the `content-length` header value, or `undefined` if absent. */
+/**
+ * Extract a single, validated `content-length` value from a raw header section
+ * (status line + header-field lines, no trailing `\r\n\r\n` terminator).
+ *
+ * This is the ONE authoritative extractor shared by the connection's framing
+ * logic ({@link Http1ConnectionImpl}) and {@link parseResponse}. Centralizing
+ * it eliminates a divergence that corrupted pipelined responses: the connection
+ * framed on the first `content-length` line (regex first-match) while
+ * `parseResponse` drained on the last (`Map` last-wins via raw `Number()`, which
+ * also produced `NaN` for non-numeric values). Enforces RFC 7230 §3.3.2:
+ *
+ *   - the value must be a pure run of decimal digits (rejecting `Number()`'s
+ *     silent `NaN`), and
+ *   - at most one `content-length` line may appear (duplicates are rejected
+ *     outright so the two sites can never disagree).
+ *
+ * @returns the decoded length, or `undefined` when the header is absent.
+ * @throws {InvalidResponseError} on a malformed (non-numeric) or duplicate
+ *     `content-length` — so callers can never frame or drain on a `NaN` /
+ *     ambiguous length.
+ */
 export function extractContentLength(headerText: string): number | undefined {
-    const match = /(?:^|\n)content-length:\s*(\d+)\r?/iu.exec(headerText);
-    if (match === null) {
+    const values: string[] = [];
+    for (const line of headerText.split("\n")) {
+        // Header lines are `\r\n`-terminated; the `\n` split leaves a trailing
+        // `\r` on each line. Parse name/value the same way parseResponse does:
+        // split at the first colon, trim both sides, lowercase the name.
+        const stripped = line.endsWith("\r") ? line.slice(0, -1) : line;
+        const colon = stripped.indexOf(":");
+        if (colon === -1) {
+            continue;
+        }
+        const name = stripped.slice(0, colon).trim().toLowerCase();
+        if (name === "content-length") {
+            values.push(stripped.slice(colon + 1).trim());
+        }
+    }
+    if (values.length === 0) {
         return undefined;
     }
-    const value = match[1];
-    return value === undefined ? undefined : Number(value);
+    if (values.length > 1) {
+        // Duplicate content-length — reject (RFC 7230 §3.3.2) rather than
+        // silently picking first or last and risking the two consumers framing
+        // on different lengths.
+        throw new InvalidResponseError(headerText.slice(0, 120));
+    }
+    const raw = values[0];
+    if (raw === undefined || !/^\d+$/u.test(raw)) {
+        // Non-numeric — `Number()` would yield NaN and `bytesConsumed` would
+        // drain the wrong number of bytes.
+        throw new InvalidResponseError(headerText.slice(0, 120));
+    }
+    return Number(raw);
 }
 
 /** Whether the response uses chunked transfer-encoding. */
@@ -149,13 +195,16 @@ export async function materialize(stream: AsyncIterable<Uint8Array>): Promise<Ui
     return out;
 }
 
-/** Collect all `set-cookie` header values (case-insensitive) in wire order. */
-export function collectSetCookie(headers: ReadonlyMap<string, string>): string[] {
-    const out: string[] = [];
-    for (const [name, value] of headers) {
-        if (name === "set-cookie") {
-            out.push(value);
-        }
-    }
-    return out;
+/**
+ * Return the `Set-Cookie` header values carried on a parsed response, in wire
+ * order.
+ *
+ * Values come from the response's dedicated `setCookie` array — populated by
+ * {@link parseResponse} from every `set-cookie` line — so multiple cookies on a
+ * single response are preserved per RFC 6265 §3.1 rather than collapsed to the
+ * last value (which is all a `Map<string,string>` can represent). A copy is
+ * returned so callers can't mutate the response's array.
+ */
+export function collectSetCookie(setCookies: readonly string[]): string[] {
+    return [...setCookies];
 }
