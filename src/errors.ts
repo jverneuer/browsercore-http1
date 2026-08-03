@@ -5,9 +5,17 @@
  * can match on `kind` instead of parsing messages.
  */
 
+/** Discriminated union of all HTTP/1.1 error kinds. */
+export type Http1ErrorKind =
+    | "Http1Error"
+    | "RedirectLimitError"
+    | "InvalidResponseError"
+    | "ContentEncodingError"
+    | "ChunkEncodingError";
+
 /** Base class for all HTTP/1.1 errors. */
 export class Http1Error extends Error {
-    public readonly kind = "Http1Error" as const;
+    public readonly kind: Http1ErrorKind = "Http1Error";
     public override readonly cause: Error | undefined;
 
     constructor(message: string, options?: { cause?: Error }) {
@@ -18,8 +26,8 @@ export class Http1Error extends Error {
 }
 
 /** Redirect chain exceeded {@link Http1Options.maxRedirects}. */
-export class RedirectLimitError extends Error {
-    public readonly kind = "RedirectLimitError" as const;
+export class RedirectLimitError extends Http1Error {
+    public override readonly kind = "RedirectLimitError" as const;
     public readonly limit: number;
     /** The URLs visited so far, in order — useful for debugging redirect loops. */
     public readonly trail: readonly string[];
@@ -35,8 +43,8 @@ export class RedirectLimitError extends Error {
 }
 
 /** The remote sent bytes that could not be parsed as a valid HTTP/1.1 response. */
-export class InvalidResponseError extends Error {
-    public readonly kind = "InvalidResponseError" as const;
+export class InvalidResponseError extends Http1Error {
+    public override readonly kind = "InvalidResponseError" as const;
     /** The raw bytes that failed to parse — truncated to a sane length for logging. */
     public readonly rawPreview: string;
     public override readonly cause: Error | undefined;
@@ -50,8 +58,8 @@ export class InvalidResponseError extends Error {
 }
 
 /** The response used a `content-encoding` this client cannot decode. */
-export class ContentEncodingError extends Error {
-    public readonly kind = "ContentEncodingError" as const;
+export class ContentEncodingError extends Http1Error {
+    public override readonly kind = "ContentEncodingError" as const;
     /** The unsupported (or corrupt) content-encoding token. */
     public readonly encoding: string;
     public override readonly cause: Error | undefined;
@@ -65,8 +73,8 @@ export class ContentEncodingError extends Error {
 }
 
 /** A chunked transfer-encoding body was malformed. */
-export class ChunkEncodingError extends Error {
-    public readonly kind = "ChunkEncodingError" as const;
+export class ChunkEncodingError extends Http1Error {
+    public override readonly kind = "ChunkEncodingError" as const;
     /** Byte offset in the body stream where the malformed chunk was detected. */
     public readonly offset: number;
     public override readonly cause: Error | undefined;
