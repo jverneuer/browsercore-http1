@@ -16,7 +16,7 @@ import type {
     HttpResponse,
     Logger,
 } from "./types.js";
-import { silentLogger } from "./types.js";
+import { silentLogger, systemClock } from "./types.js";
 import { parseResponse, serializeRequest, parseChunkedEncoding } from "./message.js";
 import { decompressBody } from "./decompress.js";
 import { assertNever, createId, createDeferred, decodeAscii } from "./utils.js";
@@ -349,6 +349,6 @@ export class Http1ConnectionImpl implements Http1Connection {
  * it with the HTTP/1.1 protocol state machine.
  */
 export function connectHttp1(options: Http1Options): Promise<Http1Connection> {
-    const id = createId("http1");
+    const id = createId("http1", options.clock ?? systemClock);
     return Promise.resolve(new Http1ConnectionImpl(id, options));
 }
