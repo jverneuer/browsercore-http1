@@ -1,6 +1,6 @@
 {
     "name": "@browsercore/http1",
-    "version": "0.1.9",
+    "version": "0.2.0",
     "description": "HTTP/1.1 client over any duplex byte stream. No knowledge of TLS or TCP — only the protocol.",
     "repository": {
         "type": "git",
