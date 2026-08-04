@@ -6,6 +6,7 @@
  */
 
 import type { Transport } from "@browsercore/transport";
+import type { DecompressionProvider } from "./decompress.js";
 
 /** Branded HTTP/1.1 connection identifier. */
 export type Http1ConnectionId = string & { __brand: "Http1ConnectionId" };
@@ -133,4 +134,14 @@ export interface Http1Options {
      * http1 performs no cookie storage of its own.
      */
     readonly cookieInterceptor?: CookieInterceptor;
+    /**
+     * Content-encoding decompression backend. http1 does NOT own a zlib
+     * provider — it depends only on the {@link DecompressionProvider}
+     * interface, never on a concrete implementation. The @browsercore/fetch
+     * layer injects its `@browsercore/compression` singleton here.
+     *
+     * When absent and a response carries a `content-encoding`, the connection
+     * raises {@link ContentEncodingError} rather than returning corrupt bytes.
+     */
+    readonly decompressionProvider?: DecompressionProvider;
 }
