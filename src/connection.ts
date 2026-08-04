@@ -148,10 +148,14 @@ export class Http1ConnectionImpl implements Http1Connection {
     /** Read bytes from the transport until a complete response is available. */
     private async readResponse(): Promise<HttpResponse> {
         while (true) {
+            // Sequential parse over the accumulating buffer — each pass depends on the previous read.
+            // eslint-disable-next-line no-await-in-loop
             const parsed = await this.tryParse();
             if (parsed !== undefined) {
                 return parsed;
             }
+            // Sequential streaming reads from the transport; order is load-bearing.
+            // eslint-disable-next-line no-await-in-loop
             const chunk = await this.readChunk();
             if (chunk === undefined) {
                 // Transport closed mid-response — drain what we have.
