@@ -5,7 +5,11 @@
  * of TLS, TCP, or DNS — it composes exclusively over `@browsercore/transport`.
  */
 
-import type { Transport } from "@browsercore/transport";
+import type { RandomSource, Transport } from "@browsercore/transport";
+
+// Re-export RandomSource so internal modules can import it from ./types.js
+// without each reaching for the transport package directly.
+export type { RandomSource };
 
 /** Branded HTTP/1.1 connection identifier. */
 export type Http1ConnectionId = string & { __brand: "Http1ConnectionId" };
@@ -133,4 +137,10 @@ export interface Http1Options {
      * http1 performs no cookie storage of its own.
      */
     readonly cookieInterceptor?: CookieInterceptor;
+    /**
+     * Source of cryptographically-strong random bytes. Used for connection IDs
+     * and any other randomness needs. Defaults to `nodeRandomSource` (drawn
+     * from `node:crypto.randomBytes`) when not provided.
+     */
+    readonly random?: RandomSource;
 }

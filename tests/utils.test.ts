@@ -6,6 +6,7 @@ import {
     consumeTrailers,
     decodeAscii,
 } from "../src/utils.js";
+import { nodeRandomSource } from "@browsercore/transport";
 
 const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
 
@@ -71,14 +72,14 @@ describe("createDeferred", () => {
 
 describe("createId", () => {
     it("generates a branded id prefixed with the given token", () => {
-        const id = createId("http1");
+        const id = createId("http1", nodeRandomSource);
         expect(typeof id).toBe("string");
         expect(id.startsWith("http1_")).toBe(true);
     });
 
     it("produces distinct ids across calls", () => {
         // Randomness + timestamp should never collide in practice.
-        expect(createId("x")).not.toBe(createId("x"));
+        expect(createId("x", nodeRandomSource)).not.toBe(createId("x", nodeRandomSource));
     });
 });
 

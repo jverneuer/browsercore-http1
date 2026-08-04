@@ -28,6 +28,7 @@ import {
     materialize,
     chunkIterable,
 } from "./connection-helpers.js";
+import { nodeRandomSource } from "@browsercore/transport";
 
 /** Concrete HTTP/1.1 connection. */
 export class Http1ConnectionImpl implements Http1Connection {
@@ -339,6 +340,7 @@ export class Http1ConnectionImpl implements Http1Connection {
  * it with the HTTP/1.1 protocol state machine.
  */
 export function connectHttp1(options: Http1Options): Promise<Http1Connection> {
-    const id = createId("http1");
+    const random = options.random ?? nodeRandomSource;
+    const id = createId("http1", random);
     return Promise.resolve(new Http1ConnectionImpl(id, options));
 }
