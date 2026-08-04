@@ -14,7 +14,9 @@ import type {
     Http1Options,
     HttpRequest,
     HttpResponse,
+    Logger,
 } from "./types.js";
+import { silentLogger, systemClock } from "./types.js";
 import { parseResponse, serializeRequest, parseChunkedEncoding } from "./message.js";
 import { decompressBody } from "./decompress.js";
 import { assertNever, createId, createDeferred, decodeAscii } from "./utils.js";
@@ -54,6 +56,9 @@ export class Http1ConnectionImpl implements Http1Connection {
     /** Set once the transport has closed unexpectedly (remote close / error). */
     private transportClosed = false;
 
+    /** Logging sink (defaults to silentLogger). Injected via Http1Options. */
+    private readonly logger: Logger;
+
     /**
      * Number of requests currently in flight. Held as a field rather than
      * derived from `state` because `close()` transitions the discriminant to
@@ -68,6 +73,10 @@ export class Http1ConnectionImpl implements Http1Connection {
         private readonly options: Http1Options,
     ) {
         this.id = id;
+        // The logger defaults to silent so library consumers see no output unless
+        // they opt in. Assigned here so both the no-arg and full-options paths
+        // share the same default.
+        this.logger = options.logger ?? silentLogger;
         this.options.transport.on("data", (chunk: Uint8Array): void => {
             this.appendBuffer(chunk);
             const waiter = this.dataWaiters.shift();
@@ -76,6 +85,7 @@ export class Http1ConnectionImpl implements Http1Connection {
             }
         });
         this.options.transport.on("close", (): void => {
+            this.logger.debug("transport closed by remote", { id: this.id });
             this.transportClosed = true;
             // Wake any pending reads so they can observe the closed transport.
             while (this.dataWaiters.length > 0) {
@@ -354,6 +364,6 @@ export class Http1ConnectionImpl implements Http1Connection {
  * it with the HTTP/1.1 protocol state machine.
  */
 export function connectHttp1(options: Http1Options): Promise<Http1Connection> {
-    const id = createId("http1");
+    const id = createId("http1", options.clock ?? systemClock);
     return Promise.resolve(new Http1ConnectionImpl(id, options));
 }

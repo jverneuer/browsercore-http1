@@ -5,7 +5,8 @@
  * cross-package imports.
  */
 
-import type { Http1ConnectionId } from "./types.js";
+import type { Http1ConnectionId, Clock } from "./types.js";
+import { systemClock } from "./types.js";
 import { DecodeError } from "./errors.js";
 
 /**
@@ -19,8 +20,8 @@ export function assertNever(x: never): never {
 }
 
 /** Generate a branded HTTP/1.1 connection id. */
-export function createId(prefix: string): Http1ConnectionId {
-    return `${prefix}_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}` as Http1ConnectionId;
+export function createId(prefix: string, clock: Clock = systemClock): Http1ConnectionId {
+    return `${prefix}_${clock.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}` as Http1ConnectionId;
 }
 
 /**

@@ -54,6 +54,8 @@ export {
     type HttpResponse,
     type CookieInterceptor,
     type CookieUrl,
+    type Logger,
 } from "./types.js";
+export { silentLogger, devLogger } from "./types.js";
 
 export { assertNever } from "./utils.js";
