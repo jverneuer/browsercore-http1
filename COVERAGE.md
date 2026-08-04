@@ -1,6 +1,6 @@
 # Coverage report
 
-Generated from `coverage-summary.json` by `scripts/coverage-md.mjs`.
+Generated from `coverage-summary.json` by `coverage-md` (@browsercore/dev).
 
 ## Total
 
