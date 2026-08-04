@@ -5,7 +5,7 @@
  * cross-package imports.
  */
 
-import type { Http1ConnectionId, Clock } from "./types.js";
+import type { Http1ConnectionId, Clock, RandomSource } from "./types.js";
 import { systemClock } from "./types.js";
 import { DecodeError } from "./errors.js";
 
@@ -19,9 +19,26 @@ export function assertNever(x: never): never {
     throw new Error(`Unexpected value: ${JSON.stringify(x)}`);
 }
 
-/** Generate a branded HTTP/1.1 connection id. */
-export function createId(prefix: string, clock: Clock = systemClock): Http1ConnectionId {
-    return `${prefix}_${clock.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}` as Http1ConnectionId;
+/**
+ * Generate a branded HTTP/1.1 connection id.
+ *
+ * The trailing segment is drawn from `random` so the id is unique without
+ * relying on `Math.random()`. This is the single sanctioned home for
+ * randomness in http1 — other modules must call this rather than reaching for
+ * randomness directly.
+ */
+export function createId(
+    prefix: string,
+    random: RandomSource,
+    clock: Clock = systemClock,
+): Http1ConnectionId {
+    // 3 bytes → 24 bits of entropy, plenty for a ~1e6-space suffix.
+    const bytes = random.bytes(3);
+    const hi = bytes[0] ?? 0;
+    const mid = bytes[1] ?? 0;
+    const lo = bytes[2] ?? 0;
+    const suffix = ((hi << 16) | (mid << 8) | lo) % 1_000_000;
+    return `${prefix}_${clock.now().toString(36)}_${suffix.toString(36)}` as Http1ConnectionId;
 }
 
 /**
