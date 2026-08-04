@@ -6,6 +6,7 @@
  */
 
 import type { Http1ConnectionId } from "./types.js";
+import { DecodeError } from "./errors.js";
 
 /**
  * Exhaustiveness check for `switch`/`if-else` over discriminated unions.
@@ -82,7 +83,7 @@ export function decodeAscii(buf: Uint8Array, start: number, end: number): string
     for (let i = start; i < end; i++) {
         const byte = buf[i];
         if (byte === undefined) {
-            throw new Error("decodeAscii: index out of bounds");
+            throw new DecodeError(i);
         }
         out += String.fromCodePoint(byte);
     }

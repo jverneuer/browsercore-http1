@@ -11,7 +11,10 @@ export type Http1ErrorKind =
     | "RedirectLimitError"
     | "InvalidResponseError"
     | "ContentEncodingError"
-    | "ChunkEncodingError";
+    | "ChunkEncodingError"
+    | "ConnectionClosedError"
+    | "ConnectionClosingError"
+    | "DecodeError";
 
 /** Base class for all HTTP/1.1 errors. */
 export class Http1Error extends Error {
@@ -83,6 +86,41 @@ export class ChunkEncodingError extends Http1Error {
         super(`Malformed chunked encoding at offset ${offset}`);
         this.name = "ChunkEncodingError";
         this.offset = offset;
+        this.cause = options?.cause;
+    }
+}
+
+/** The transport closed before a complete response was received. */
+export class ConnectionClosedError extends Http1Error {
+    public override readonly kind = "ConnectionClosedError" as const;
+
+    constructor(options?: { cause?: Error }) {
+        super("transport closed before response received", options);
+        this.name = "ConnectionClosedError";
+    }
+}
+
+/** A new request was attempted on a connection that is closing. */
+export class ConnectionClosingError extends Http1Error {
+    public override readonly kind = "ConnectionClosingError" as const;
+
+    constructor(options?: { cause?: Error }) {
+        super("connection is closing — no new requests allowed", options);
+        this.name = "ConnectionClosingError";
+    }
+}
+
+/** A slice of bytes could not be decoded as ASCII. */
+export class DecodeError extends Http1Error {
+    public override readonly kind = "DecodeError" as const;
+    /** The index in the buffer that was out of bounds. */
+    public readonly index: number;
+    public override readonly cause: Error | undefined;
+
+    constructor(index: number, options?: { cause?: Error }) {
+        super(`decodeAscii: index out of bounds at position ${index}`);
+        this.name = "DecodeError";
+        this.index = index;
         this.cause = options?.cause;
     }
 }

@@ -9,7 +9,10 @@ export { connectHttp1, Http1ConnectionImpl } from "./connection.js";
 
 export {
     ChunkEncodingError,
+    ConnectionClosedError,
+    ConnectionClosingError,
     ContentEncodingError,
+    DecodeError,
     Http1Error,
     InvalidResponseError,
     RedirectLimitError,
@@ -24,7 +27,12 @@ export {
     serializeRequest,
 } from "./message.js";
 
-export { decompressBody, isSupportedContentEncoding, type ContentEncoding } from "./decompress.js";
+export {
+    decompressBody,
+    isSupportedContentEncoding,
+    type ContentEncoding,
+    type DecompressionProvider,
+} from "./decompress.js";
 
 export {
     followRedirects,

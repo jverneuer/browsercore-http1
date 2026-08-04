@@ -37,7 +37,11 @@
         "test": "vitest run",
         "lint": "oxlint --type-aware src/"
     },
+    "dependencies": {
+        "@browsercore/transport": "0.2.0"
+    },
     "devDependencies": {
+        "@browsercore/compression": "0.2.0",
         "@browsercore/dev": "latest",
         "@types/node": "^26.1.2",
         "@vitest/coverage-v8": "^4.1.10",
@@ -45,10 +49,6 @@
         "oxlint-tsgolint": "7.0.2001",
         "typescript": "^7.0.0",
         "vitest": "^4.1.10"
-    },
-    "dependencies": {
-        "@browsercore/compression": "0.2.0",
-        "@browsercore/transport": "0.2.0"
     },
     "engines": {
         "node": ">=26.0.0"
