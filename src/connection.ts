@@ -148,10 +148,14 @@ export class Http1ConnectionImpl implements Http1Connection {
     /** Read bytes from the transport until a complete response is available. */
     private async readResponse(): Promise<HttpResponse> {
         while (true) {
+            // Sequential: each chunk must be read from the transport before the
+            // next can arrive. This is a protocol read loop, not parallel work.
+            // eslint-disable-next-line no-await-in-loop
             const parsed = await this.tryParse();
             if (parsed !== undefined) {
                 return parsed;
             }
+            // eslint-disable-next-line no-await-in-loop
             const chunk = await this.readChunk();
             if (chunk === undefined) {
                 // Transport closed mid-response — drain what we have.

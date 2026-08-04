@@ -121,6 +121,9 @@ export async function followRedirects(
         trail.push(nextUrl);
         url = nextUrl;
         request = buildRedirectRequest(request, response.statusCode, url);
+        // Sequential: each redirect depends on the previous response's Location
+        // header. The next request cannot be issued until the current one resolves.
+        // eslint-disable-next-line no-await-in-loop
         response = await conn.request(request);
     }
 
