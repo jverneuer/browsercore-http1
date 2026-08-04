@@ -74,6 +74,22 @@ try {
 `@browsercore/compression` wraps `node:zlib`; `@browsercore/http1` calls it
 never `node:zlib` directly.
 
+## Position in BrowserCore
+
+```
+Application
+      │
+   @browsercore/http1
+      │
+   @browsercore/tls
+      │
+@browsercore/transport
+      │
+     TCP
+```
+
+Every higher networking layer communicates with the network exclusively through the layers below it.
+
 ## License
 
 MIT
