@@ -5,19 +5,27 @@
  * stream. Handles keep-alive via serial request/response on a single connection.
  */
 
-import type {
-    CookieUrl,
-    Http1CloseReason,
-    Http1Connection,
-    Http1ConnectionId,
-    Http1ConnectionState,
-    Http1Options,
-    HttpRequest,
-    HttpResponse,
+import {
+    type CookieUrl,
+    type Http1CloseReason,
+    type Http1Connection,
+    type Http1ConnectionId,
+    type Http1ConnectionState,
+    type Http1Options,
+    type HttpRequest,
+    type HttpResponse,
+    type Logger,
+    silentLogger,
+    systemClock,
 } from "./types.js";
 import { parseResponse, serializeRequest, parseChunkedEncoding } from "./message.js";
 import { decompressBody } from "./decompress.js";
-import { assertNever, createId, createDeferred, decodeAscii } from "./utils.js";
+import { assertNever, createId, createDeferred, decodeAscii, nodeRandomSource } from "./utils.js";
+import {
+    ConnectionClosedError,
+    ConnectionClosingError,
+    ContentEncodingError,
+} from "./errors.js";
 import {
     collectSetCookie,
     describeCloseReason,
@@ -49,6 +57,9 @@ export class Http1ConnectionImpl implements Http1Connection {
     /** Set once the transport has closed unexpectedly (remote close / error). */
     private transportClosed = false;
 
+    /** Logging sink (defaults to silentLogger). Injected via Http1Options. */
+    private readonly logger: Logger;
+
     /**
      * Number of requests currently in flight. Held as a field rather than
      * derived from `state` because `close()` transitions the discriminant to
@@ -63,6 +74,10 @@ export class Http1ConnectionImpl implements Http1Connection {
         private readonly options: Http1Options,
     ) {
         this.id = id;
+        // The logger defaults to silent so library consumers see no output unless
+        // they opt in. Assigned here so both the no-arg and full-options paths
+        // share the same default.
+        this.logger = options.logger ?? silentLogger;
         this.options.transport.on("data", (chunk: Uint8Array): void => {
             this.appendBuffer(chunk);
             const waiter = this.dataWaiters.shift();
@@ -71,6 +86,7 @@ export class Http1ConnectionImpl implements Http1Connection {
             }
         });
         this.options.transport.on("close", (): void => {
+            this.logger.debug("transport closed by remote", { id: this.id });
             this.transportClosed = true;
             // Wake any pending reads so they can observe the closed transport.
             while (this.dataWaiters.length > 0) {
@@ -164,7 +180,7 @@ export class Http1ConnectionImpl implements Http1Connection {
                     this.buffer = this.buffer.slice(0, 0);
                     return this.decodeBody(response);
                 }
-                throw new Error("transport closed before response received");
+                throw new ConnectionClosedError();
             }
             // The chunk was already appended to the buffer by the "data" event
             // handler, which also woke this waiter. Nothing more to do here.
@@ -240,7 +256,14 @@ export class Http1ConnectionImpl implements Http1Connection {
 
         const contentEncoding = response.headers.get("content-encoding");
         if (contentEncoding !== undefined) {
-            body = decompressBody(body, contentEncoding);
+            const provider = this.options.decompressionProvider;
+            if (provider === undefined) {
+                // No backend was injected — we cannot safely decode. Raising
+                // here keeps the "no corrupt bytes" invariant instead of
+                // returning the compressed body as-is.
+                throw new ContentEncodingError(contentEncoding);
+            }
+            body = decompressBody(body, contentEncoding, provider);
         }
 
         return { ...response, body };
@@ -248,10 +271,13 @@ export class Http1ConnectionImpl implements Http1Connection {
 
     /** Read one chunk from the transport, or `undefined` once it has closed. */
     private readChunk(): Promise<Uint8Array | undefined> {
-        return new Promise((resolve: (value?: Uint8Array) => void) => {
+        return new Promise((resolve: (value: Uint8Array | undefined) => void) => {
             this.dataWaiters.push((chunk: Uint8Array) => {
                 if (this.transportClosed && chunk.length === 0) {
-                    resolve();
+                    // Resolver param is `(value: Uint8Array | undefined) => void`
+                    // (non-optional), so `undefined` must be passed explicitly.
+                    // oxlint-disable-next-line unicorn/no-useless-undefined
+                    resolve(undefined);
                 } else {
                     resolve(chunk);
                 }
@@ -276,7 +302,7 @@ export class Http1ConnectionImpl implements Http1Connection {
             case "in_flight":
                 return;
             case "closing":
-                throw new Error("connection is closing — no new requests allowed");
+                throw new ConnectionClosingError();
             case "closed":
                 throw new Error(`connection is closed: ${describeCloseReason(s.reason)}`);
             default:
@@ -339,6 +365,7 @@ export class Http1ConnectionImpl implements Http1Connection {
  * it with the HTTP/1.1 protocol state machine.
  */
 export function connectHttp1(options: Http1Options): Promise<Http1Connection> {
-    const id = createId("http1");
+    const random = options.random ?? nodeRandomSource;
+    const id = createId("http1", random, options.clock ?? systemClock);
     return Promise.resolve(new Http1ConnectionImpl(id, options));
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { EventEmitter } from "node:events";
 import { gzipSync } from "node:zlib";
 import type { Transport } from "@browsercore/transport";
+import { compression } from "@browsercore/compression";
 import { connectHttp1 } from "../src/connection.js";
 import { ContentEncodingError } from "../src/errors.js";
 import { followRedirects } from "../src/redirect.js";
@@ -72,7 +73,7 @@ describe("Http1Connection content-encoding error propagation", () => {
         // error leak across the package boundary.
         const transport = new FakeTransport();
         transport.queueResponse(rawResponse(200, { "content-encoding": "zstd", "content-length": "3" }, "abc"));
-        const conn = await connectHttp1({ transport });
+        const conn = await connectHttp1({ transport, decompressionProvider: compression });
         await expect(conn.request(getReq())).rejects.toBeInstanceOf(ContentEncodingError);
         await conn.close();
     });
@@ -86,7 +87,7 @@ describe("Http1Connection content-encoding error propagation", () => {
         const wire = new Uint8Array([...header, ...garbage]);
         const transport = new FakeTransport();
         transport.queueResponse(wire);
-        const conn = await connectHttp1({ transport });
+        const conn = await connectHttp1({ transport, decompressionProvider: compression });
         await expect(conn.request(getReq())).rejects.toBeInstanceOf(ContentEncodingError);
         await conn.close();
     });
@@ -100,7 +101,7 @@ describe("Http1Connection content-encoding error propagation", () => {
         const wire = new Uint8Array([...header, ...body]);
         const transport = new FakeTransport();
         transport.queueResponse(wire);
-        const conn = await connectHttp1({ transport });
+        const conn = await connectHttp1({ transport, decompressionProvider: compression });
         const response = await conn.request(getReq());
         expect(response.statusCode).toBe(200);
         expect(dec(response.body)).toBe(payload);
@@ -115,7 +116,7 @@ describe("Http1Connection request with a body", () => {
         // server-side contract for a well-formed HTTP/1.1 POST.
         const transport = new FakeTransport();
         transport.queueResponse(rawResponse(200, { "content-length": "2" }, "ok"));
-        const conn = await connectHttp1({ transport });
+        const conn = await connectHttp1({ transport, decompressionProvider: compression });
         const data = enc("\x00\x01\x02\x03");
         const response = await conn.request({
             method: "POST",
@@ -144,7 +145,7 @@ describe("Http1Connection close idempotency", () => {
         // may close both on success and in a finally block.
         const transport = new FakeTransport();
         transport.queueResponse(rawResponse(200, { "content-length": "2" }, "ok"));
-        const conn = await connectHttp1({ transport });
+        const conn = await connectHttp1({ transport, decompressionProvider: compression });
         await conn.request(getReq());
         await conn.close();
         expect(conn.state.state).toBe("closed");

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EventEmitter } from "node:events";
 import type { Transport } from "@browsercore/transport";
+import { compression } from "@browsercore/compression";
 import { gzipSync, brotliCompressSync } from "node:zlib";
 import { connectHttp1 } from "../src/connection.js";
 import type { HttpRequest } from "../src/types.js";
@@ -53,7 +54,7 @@ describe("Http1Connection body decoding", () => {
 
         const transport = new FakeTransport();
         transport.queueResponse(wire);
-        const conn = await connectHttp1({ transport });
+        const conn = await connectHttp1({ transport, decompressionProvider: compression });
         const response = await conn.request({
             method: "GET",
             url: "/",
@@ -80,7 +81,7 @@ describe("Http1Connection body decoding", () => {
 
         const transport = new FakeTransport();
         transport.queueResponse(wire);
-        const conn = await connectHttp1({ transport });
+        const conn = await connectHttp1({ transport, decompressionProvider: compression });
         const response = await conn.request({
             method: "GET",
             url: "/",
@@ -98,7 +99,7 @@ describe("Http1Connection body decoding", () => {
 
         const transport = new FakeTransport();
         transport.queueResponse(wire);
-        const conn = await connectHttp1({ transport });
+        const conn = await connectHttp1({ transport, decompressionProvider: compression });
         const response = await conn.request({
             method: "GET",
             url: "/",
@@ -122,7 +123,7 @@ describe("Http1Connection body decoding", () => {
 
         const transport = new FakeTransport();
         transport.queueResponse(wire);
-        const conn = await connectHttp1({ transport });
+        const conn = await connectHttp1({ transport, decompressionProvider: compression });
         const response = await conn.request({
             method: "GET",
             url: "/",

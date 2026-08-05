@@ -5,7 +5,18 @@
  * cross-package imports.
  */
 
-import type { Http1ConnectionId } from "./types.js";
+import { systemClock, type Http1ConnectionId, type Clock, type RandomSource } from "./types.js";
+import { DecodeError } from "./errors.js";
+import { randomBytes } from "node:crypto";
+
+/**
+ * Default {@link RandomSource} backed by `node:crypto.randomBytes`.
+ * http1 owns this default so it doesn't depend on a concrete transport
+ * implementation at runtime — only the {@link RandomSource} type contract.
+ */
+export const nodeRandomSource: RandomSource = {
+    randomBytes: (len) => randomBytes(len),
+};
 
 /**
  * Exhaustiveness check for `switch`/`if-else` over discriminated unions.
@@ -17,9 +28,26 @@ export function assertNever(x: never): never {
     throw new Error(`Unexpected value: ${JSON.stringify(x)}`);
 }
 
-/** Generate a branded HTTP/1.1 connection id. */
-export function createId(prefix: string): Http1ConnectionId {
-    return `${prefix}_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}` as Http1ConnectionId;
+/**
+ * Generate a branded HTTP/1.1 connection id.
+ *
+ * The trailing segment is drawn from `random` so the id is unique without
+ * relying on `Math.random()`. This is the single sanctioned home for
+ * randomness in http1 — other modules must call this rather than reaching for
+ * randomness directly.
+ */
+export function createId(
+    prefix: string,
+    random: RandomSource,
+    clock: Clock = systemClock,
+): Http1ConnectionId {
+    // 3 bytes → 24 bits of entropy, plenty for a ~1e6-space suffix.
+    const bytes = random.randomBytes(3);
+    const hi = bytes[0] ?? 0;
+    const mid = bytes[1] ?? 0;
+    const lo = bytes[2] ?? 0;
+    const suffix = ((hi << 16) | (mid << 8) | lo) % 1_000_000;
+    return `${prefix}_${clock.now().toString(36)}_${suffix.toString(36)}` as Http1ConnectionId;
 }
 
 /**
@@ -82,7 +110,7 @@ export function decodeAscii(buf: Uint8Array, start: number, end: number): string
     for (let i = start; i < end; i++) {
         const byte = buf[i];
         if (byte === undefined) {
-            throw new Error("decodeAscii: index out of bounds");
+            throw new DecodeError(i);
         }
         out += String.fromCodePoint(byte);
     }

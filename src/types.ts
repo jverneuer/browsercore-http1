@@ -5,7 +5,12 @@
  * of TLS, TCP, or DNS — it composes exclusively over `@browsercore/transport`.
  */
 
-import type { Transport } from "@browsercore/transport";
+import type { RandomSource, Transport } from "@browsercore/transport";
+import type { DecompressionProvider } from "./decompress.js";
+
+// Re-export RandomSource so internal modules can import it from ./types.js
+// without each reaching for the transport package directly.
+export type { RandomSource };
 
 /** Branded HTTP/1.1 connection identifier. */
 export type Http1ConnectionId = string & { __brand: "Http1ConnectionId" };
@@ -82,6 +87,73 @@ export interface Http1Connection {
     close(reason?: Http1CloseReason): Promise<void>;
 }
 
+// ---------------------------------------------------------------------------
+// Logger abstraction (injected — decouples protocol code from `console`)
+// ---------------------------------------------------------------------------
+
+/**
+ * Logging abstraction for HTTP/1.1 internals. Injected via {@link Http1Options}
+ * so callers control sink + verbosity without the protocol layer depending on
+ * `console` directly — keeps the package testable and embeddable in non-Node
+ * hosts (browsers, workers) where `console` may not be the desired sink.
+ *
+ * All methods are synchronous and MUST NOT throw — logging failures must never
+ * disrupt protocol operation.
+ */
+export interface Logger {
+    /** Verbose diagnostics — disabled by default in production. */
+    debug(message: string, ...meta: readonly unknown[]): void;
+    /** Recoverable anomaly (e.g. a response we tolerated but that looked off). */
+    warn(message: string, ...meta: readonly unknown[]): void;
+    /** Non-recoverable failure (e.g. transport closed mid-response). */
+    error(message: string, ...meta: readonly unknown[]): void;
+}
+
+/** A silent logger — drops every call. This is the default. */
+export const silentLogger: Logger = {
+    debug: () => {},
+    warn: () => {},
+    error: () => {},
+};
+
+/**
+ * A development logger — forwards to the platform `console`. Opt-in; the
+ * default is {@link silentLogger} so production callers must explicitly enable
+ * noise.
+ *
+ * This is the one sanctioned bridge to `console` in src/. The CI grep excludes
+ * lines disabled for no-console so protocol code stays console-free while this
+ * opt-in logger remains functional.
+ */
+export const devLogger: Logger = {
+    debug: (message, ...meta): void => { console.debug(message, ...meta); }, // oxlint-disable-line no-console
+    warn: (message, ...meta): void => { console.warn(message, ...meta); }, // oxlint-disable-line no-console
+    error: (message, ...meta): void => { console.error(message, ...meta); }, // oxlint-disable-line no-console
+};
+
+// ---------------------------------------------------------------------------
+// Clock abstraction (injected — decouples protocol code from `Date.now()`)
+// ---------------------------------------------------------------------------
+
+/**
+ * Clock for time-dependent operations. Injected via {@link Http1Options} so
+ * callers control the time source — keeps the package testable against a
+ * deterministic clock (reproducible id generation) and embeddable in non-Node
+ * hosts (browsers, workers) where `Date.now()` may not be the desired source.
+ *
+ * `now()` MUST return milliseconds since the Unix epoch, matching the contract
+ * of `Date.now()`.
+ */
+export interface Clock {
+    /** Current time in milliseconds since the Unix epoch. */
+    now(): number;
+}
+
+/** The default clock — delegates to the platform `Date.now()`. */
+export const systemClock: Clock = {
+    now: () => Date.now(),
+};
+
 /**
  * Cookie-jar integration seam.
  *
@@ -133,4 +205,32 @@ export interface Http1Options {
      * http1 performs no cookie storage of its own.
      */
     readonly cookieInterceptor?: CookieInterceptor;
+    /**
+     * Content-encoding decompression backend. http1 does NOT own a zlib
+     * provider — it depends only on the {@link DecompressionProvider}
+     * interface, never on a concrete implementation. The @browsercore/fetch
+     * layer injects its `@browsercore/compression` singleton here.
+     *
+     * When absent and a response carries a `content-encoding`, the connection
+     * raises {@link ContentEncodingError} rather than returning corrupt bytes.
+     */
+    readonly decompressionProvider?: DecompressionProvider;
+    /**
+     * Logger for protocol diagnostics. Defaults to {@link silentLogger} — no
+     * output unless the caller opts in. Use {@link devLogger} to forward to
+     * `console`.
+     */
+    readonly logger?: Logger;
+    /**
+     * Clock for time-dependent operations. Defaults to {@link systemClock}
+     * (delegates to `Date.now()`). Inject a deterministic clock for
+     * reproducible ids in tests.
+     */
+    readonly clock?: Clock;
+    /**
+     * Source of cryptographically-strong random bytes. Used for connection IDs
+     * and any other randomness needs. Defaults to `nodeRandomSource` (drawn
+     * from `node:crypto.randomBytes`) when not provided.
+     */
+    readonly random?: RandomSource;
 }

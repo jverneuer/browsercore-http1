@@ -36,7 +36,7 @@ export function serializeRequest(req: HttpRequest): Uint8Array {
         lines.push(`${name.toLowerCase()}: ${value}`);
     }
     lines.push("", "");
-    const headerBytes = Buffer.from(lines.join("\r\n"), "ascii");
+    const headerBytes = new TextEncoder().encode(lines.join("\r\n"));
     switch (req.body.kind) {
         case "empty":
             return new Uint8Array(headerBytes);
@@ -60,7 +60,7 @@ export function serializeRequest(req: HttpRequest): Uint8Array {
  * @throws {InvalidResponseError} if the bytes cannot be parsed as a response.
  */
 export function parseResponse(buf: Uint8Array): ParseResponseResult {
-    const text = Buffer.from(buf).toString("ascii");
+    const text = decodeAscii(buf, 0, buf.length);
     const headerEnd = text.indexOf("\r\n\r\n");
     if (headerEnd === -1) {
         throw new InvalidResponseError(text.slice(0, 120));
