@@ -15,7 +15,7 @@ import { randomBytes } from "node:crypto";
  * implementation at runtime — only the {@link RandomSource} type contract.
  */
 export const nodeRandomSource: RandomSource = {
-    randomBytes: (len) => randomBytes(len),
+    randomBytes: (len: number) => randomBytes(len),
 };
 
 /**

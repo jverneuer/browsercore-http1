@@ -2,6 +2,8 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
   pull_request:
     branches: [main]
 jobs:
@@ -39,28 +41,18 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint -- --deny-warnings
       - run: npm test -- --coverage
-      # Enforce a hard floor on every coverage metric. A drop below MINIMUM on
-      # any of statements / branches / functions / lines fails the build, so a
-      # change that erodes coverage cannot land silently.
-      - name: Enforce >=94% coverage (MINIMUM=94)
+      - name: Enforce >=94% coverage (statements, branches, functions, lines)
         run: |
           node -e "
-          const MINIMUM = 94;
           const t = require('./coverage/coverage-summary.json').total;
-          const metrics = {
-            statements: t.statements.pct,
-            branches: t.branches.pct,
-            functions: t.functions.pct,
-            lines: t.lines.pct,
-          };
-          const failed = Object.entries(metrics).filter(([, p]) => p < MINIMUM);
-          if (failed.length > 0) {
-            for (const [name, p] of failed) {
-              console.error(name + ' coverage ' + p + '% < ' + MINIMUM + '% threshold');
-            }
+          const min = 94;
+          const failed = [['statements',t.statements.pct],['branches',t.branches.pct],['functions',t.functions.pct],['lines',t.lines.pct]].filter(([,p])=>p<min);
+          if (failed.length) {
+            console.error('Coverage below '+min+'% threshold:');
+            for (const [k,p] of failed) console.error('  '+k+' '+p+'% < '+min+'%');
             process.exit(1);
           }
-          console.log('Coverage OK — ' + Object.entries(metrics).map(([n, p]) => n + ': ' + p + '%').join(', '));
+          console.log('Coverage OK — statements '+t.statements.pct+'%, branches '+t.branches.pct+'%, functions '+t.functions.pct+'%, lines '+t.lines.pct+'% >= '+min+'%');
           "
       - name: Generate COVERAGE.md
         run: npx coverage-md
