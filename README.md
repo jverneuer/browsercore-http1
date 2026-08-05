@@ -1,7 +1,7 @@
 # @browsercore/http1
 
 [![npm version](https://img.shields.io/npm/v/@browsercore/http1)](https://www.npmjs.com/package/@browsercore/http1)
-[![coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/jverneuer/browsercore-http1/coverage/coverage/badge.json)](https://github.com/jverneuer/browsercore-http1/blob/main/COVERAGE.md)
+[![coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/jverneuer/browsercore-http1/main/.github/coverage-badge.json)](https://github.com/jverneuer/browsercore-http1/blob/main/COVERAGE.md)
 [![lint](https://img.shields.io/github/actions/workflow/status/jverneuer/browsercore-http1/ci.yml?label=lint)](https://github.com/jverneuer/browsercore-http1/actions/workflows/ci.yml)
 
 An HTTP/1.1 client over any duplex byte stream. Serializes requests, parses
