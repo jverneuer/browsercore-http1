@@ -39,7 +39,7 @@
         "lint": "oxlint --type-aware src/"
     },
     "dependencies": {
-        "@browsercore/transport": "0.2.0"
+        "@browsercore/transport": "file:../transport"
     },
     "devDependencies": {
         "@browsercore/compression": "0.2.0",

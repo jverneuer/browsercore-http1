@@ -33,7 +33,7 @@ export function createId(
     clock: Clock = systemClock,
 ): Http1ConnectionId {
     // 3 bytes → 24 bits of entropy, plenty for a ~1e6-space suffix.
-    const bytes = random.bytes(3);
+    const bytes = random.randomBytes(3);
     const hi = bytes[0] ?? 0;
     const mid = bytes[1] ?? 0;
     const lo = bytes[2] ?? 0;
