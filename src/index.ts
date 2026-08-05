@@ -58,4 +58,4 @@ export {
 } from "./types.js";
 export { silentLogger, devLogger } from "./types.js";
 
-export { assertNever } from "./utils.js";
+export { assertNever, nodeRandomSource } from "./utils.js";

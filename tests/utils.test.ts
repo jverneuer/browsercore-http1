@@ -5,8 +5,8 @@ import {
     createDeferred,
     consumeTrailers,
     decodeAscii,
+    nodeRandomSource,
 } from "../src/utils.js";
-import { nodeRandomSource } from "@browsercore/transport";
 
 const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
 

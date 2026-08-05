@@ -27,7 +27,9 @@ jobs:
       - run: npm install
       - name: Enforce no console.log in src/
         run: |
-          VIOLATIONS=$(grep -rnE 'console\.(log|warn|error)\(' src/ || true)
+          # The one sanctioned bridge to console is devLogger in src/types.ts
+          # (opt-in, documented). Exclude lines disabled for no-console.
+          VIOLATIONS=$(grep -rnE 'console\.(log|warn|error)\(' src/ | grep -v 'oxlint-disable-line no-console' || true)
           if [ -n "$VIOLATIONS" ]; then
             echo "ERROR: console.log/warn/error found in src/. Use injected Logger instead."
             echo "$VIOLATIONS"

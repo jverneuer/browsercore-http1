@@ -5,21 +5,22 @@
  * stream. Handles keep-alive via serial request/response on a single connection.
  */
 
-import type {
-    CookieUrl,
-    Http1CloseReason,
-    Http1Connection,
-    Http1ConnectionId,
-    Http1ConnectionState,
-    Http1Options,
-    HttpRequest,
-    HttpResponse,
-    Logger,
+import {
+    type CookieUrl,
+    type Http1CloseReason,
+    type Http1Connection,
+    type Http1ConnectionId,
+    type Http1ConnectionState,
+    type Http1Options,
+    type HttpRequest,
+    type HttpResponse,
+    type Logger,
+    silentLogger,
+    systemClock,
 } from "./types.js";
-import { silentLogger, systemClock } from "./types.js";
 import { parseResponse, serializeRequest, parseChunkedEncoding } from "./message.js";
 import { decompressBody } from "./decompress.js";
-import { assertNever, createId, createDeferred, decodeAscii } from "./utils.js";
+import { assertNever, createId, createDeferred, decodeAscii, nodeRandomSource } from "./utils.js";
 import {
     ConnectionClosedError,
     ConnectionClosingError,
@@ -35,7 +36,6 @@ import {
     materialize,
     chunkIterable,
 } from "./connection-helpers.js";
-import { nodeRandomSource } from "@browsercore/transport";
 
 /** Concrete HTTP/1.1 connection. */
 export class Http1ConnectionImpl implements Http1Connection {

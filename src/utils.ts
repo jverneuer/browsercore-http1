@@ -5,9 +5,18 @@
  * cross-package imports.
  */
 
-import type { Http1ConnectionId, Clock, RandomSource } from "./types.js";
-import { systemClock } from "./types.js";
+import { systemClock, type Http1ConnectionId, type Clock, type RandomSource } from "./types.js";
 import { DecodeError } from "./errors.js";
+import { randomBytes } from "node:crypto";
+
+/**
+ * Default {@link RandomSource} backed by `node:crypto.randomBytes`.
+ * http1 owns this default so it doesn't depend on a concrete transport
+ * implementation at runtime — only the {@link RandomSource} type contract.
+ */
+export const nodeRandomSource: RandomSource = {
+    randomBytes: (len) => randomBytes(len),
+};
 
 /**
  * Exhaustiveness check for `switch`/`if-else` over discriminated unions.

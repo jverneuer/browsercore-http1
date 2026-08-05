@@ -120,11 +120,15 @@ export const silentLogger: Logger = {
  * A development logger — forwards to the platform `console`. Opt-in; the
  * default is {@link silentLogger} so production callers must explicitly enable
  * noise.
+ *
+ * This is the one sanctioned bridge to `console` in src/. The CI grep excludes
+ * lines disabled for no-console so protocol code stays console-free while this
+ * opt-in logger remains functional.
  */
 export const devLogger: Logger = {
-    debug: (_message, ..._meta) => { /* dev logger: console disabled in src per coding standards */ },
-    warn: (_message, ..._meta) => { /* dev logger: console disabled in src per coding standards */ },
-    error: (_message, ..._meta) => { /* dev logger: console disabled in src per coding standards */ },
+    debug: (message, ...meta): void => { console.debug(message, ...meta); }, // oxlint-disable-line no-console
+    warn: (message, ...meta): void => { console.warn(message, ...meta); }, // oxlint-disable-line no-console
+    error: (message, ...meta): void => { console.error(message, ...meta); }, // oxlint-disable-line no-console
 };
 
 // ---------------------------------------------------------------------------
