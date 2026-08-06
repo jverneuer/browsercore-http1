@@ -41,7 +41,7 @@
         "coverage-md": "./bin/coverage-md.mjs"
     },
     "dependencies": {
-        "@browsercore/transport": "^0.2.1"
+        "@browsercore/transport": "^0.2.3"
     },
     "devDependencies": {
         "@browsercore/compression": "0.2.0",
