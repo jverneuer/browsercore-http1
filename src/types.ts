@@ -88,50 +88,6 @@ export interface Http1Connection {
 }
 
 // ---------------------------------------------------------------------------
-// Logger abstraction (injected — decouples protocol code from `console`)
-// ---------------------------------------------------------------------------
-
-/**
- * Logging abstraction for HTTP/1.1 internals. Injected via {@link Http1Options}
- * so callers control sink + verbosity without the protocol layer depending on
- * `console` directly — keeps the package testable and embeddable in non-Node
- * hosts (browsers, workers) where `console` may not be the desired sink.
- *
- * All methods are synchronous and MUST NOT throw — logging failures must never
- * disrupt protocol operation.
- */
-export interface Logger {
-    /** Verbose diagnostics — disabled by default in production. */
-    debug(message: string, ...meta: readonly unknown[]): void;
-    /** Recoverable anomaly (e.g. a response we tolerated but that looked off). */
-    warn(message: string, ...meta: readonly unknown[]): void;
-    /** Non-recoverable failure (e.g. transport closed mid-response). */
-    error(message: string, ...meta: readonly unknown[]): void;
-}
-
-/** A silent logger — drops every call. This is the default. */
-export const silentLogger: Logger = {
-    debug: () => {},
-    warn: () => {},
-    error: () => {},
-};
-
-/**
- * A development logger — forwards to the platform `console`. Opt-in; the
- * default is {@link silentLogger} so production callers must explicitly enable
- * noise.
- *
- * This is the one sanctioned bridge to `console` in src/. The CI grep excludes
- * lines disabled for no-console so protocol code stays console-free while this
- * opt-in logger remains functional.
- */
-export const devLogger: Logger = {
-    debug: (message, ...meta): void => { console.debug(message, ...meta); }, // oxlint-disable-line no-console
-    warn: (message, ...meta): void => { console.warn(message, ...meta); }, // oxlint-disable-line no-console
-    error: (message, ...meta): void => { console.error(message, ...meta); }, // oxlint-disable-line no-console
-};
-
-// ---------------------------------------------------------------------------
 // Clock abstraction (injected — decouples protocol code from `Date.now()`)
 // ---------------------------------------------------------------------------
 
@@ -215,12 +171,6 @@ export interface Http1Options {
      * raises {@link ContentEncodingError} rather than returning corrupt bytes.
      */
     readonly decompressionProvider?: DecompressionProvider;
-    /**
-     * Logger for protocol diagnostics. Defaults to {@link silentLogger} — no
-     * output unless the caller opts in. Use {@link devLogger} to forward to
-     * `console`.
-     */
-    readonly logger?: Logger;
     /**
      * Clock for time-dependent operations. Defaults to {@link systemClock}
      * (delegates to `Date.now()`). Inject a deterministic clock for
