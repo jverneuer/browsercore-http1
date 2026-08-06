@@ -14,8 +14,6 @@ import {
     type Http1Options,
     type HttpRequest,
     type HttpResponse,
-    type Logger,
-    silentLogger,
     systemClock,
 } from "./types.js";
 import { parseResponse, serializeRequest, parseChunkedEncoding } from "./message.js";
@@ -58,9 +56,6 @@ export class Http1ConnectionImpl implements Http1Connection {
     /** Set once the transport has closed unexpectedly (remote close / error). */
     private transportClosed = false;
 
-    /** Logging sink (defaults to silentLogger). Injected via Http1Options. */
-    private readonly logger: Logger;
-
     /**
      * Number of requests currently in flight. Held as a field rather than
      * derived from `state` because `close()` transitions the discriminant to
@@ -75,10 +70,6 @@ export class Http1ConnectionImpl implements Http1Connection {
         private readonly options: Http1Options,
     ) {
         this.id = id;
-        // The logger defaults to silent so library consumers see no output unless
-        // they opt in. Assigned here so both the no-arg and full-options paths
-        // share the same default.
-        this.logger = options.logger ?? silentLogger;
         this.options.transport.on("data", (chunk: Uint8Array): void => {
             this.appendBuffer(chunk);
             const waiter = this.dataWaiters.shift();
@@ -87,7 +78,6 @@ export class Http1ConnectionImpl implements Http1Connection {
             }
         });
         this.options.transport.on("close", (): void => {
-            this.logger.debug("transport closed by remote", { id: this.id });
             this.transportClosed = true;
             // Wake any pending reads so they can observe the closed transport.
             while (this.dataWaiters.length > 0) {
