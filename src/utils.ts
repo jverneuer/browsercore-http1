@@ -7,16 +7,9 @@
 
 import { systemClock, type Http1ConnectionId, type Clock, type RandomSource } from "./types.js";
 import { DecodeError } from "./errors.js";
-import { randomBytes } from "node:crypto";
+import { nodeRandomSource } from "@browsercore/transport";
 
-/**
- * Default {@link RandomSource} backed by `node:crypto.randomBytes`.
- * http1 owns this default so it doesn't depend on a concrete transport
- * implementation at runtime — only the {@link RandomSource} type contract.
- */
-export const nodeRandomSource: RandomSource = {
-    randomBytes: (len: number) => randomBytes(len),
-};
+export { nodeRandomSource };
 
 /**
  * Exhaustiveness check for `switch`/`if-else` over discriminated unions.

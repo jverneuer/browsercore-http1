@@ -20,7 +20,8 @@ import {
 } from "./types.js";
 import { parseResponse, serializeRequest, parseChunkedEncoding } from "./message.js";
 import { decompressBody } from "./decompress.js";
-import { assertNever, createId, createDeferred, decodeAscii, nodeRandomSource } from "./utils.js";
+import { assertNever, createId, createDeferred, decodeAscii } from "./utils.js";
+import { nodeRandomSource } from "@browsercore/transport";
 import {
     ConnectionClosedError,
     ConnectionClosingError,
