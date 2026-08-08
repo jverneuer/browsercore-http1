@@ -183,8 +183,8 @@ export interface Http1Options {
     readonly clock?: Clock;
     /**
      * Source of cryptographically-strong random bytes. Used for connection IDs
-     * and any other randomness needs. Defaults to `nodeRandomSource` (drawn
-     * from `node:crypto.randomBytes`) when not provided.
+     * and any other randomness needs. Defaults to a `node:crypto.randomBytes`
+     * backed source (via `createRandomSource()`) when not provided.
      */
     readonly random?: RandomSource;
     /**

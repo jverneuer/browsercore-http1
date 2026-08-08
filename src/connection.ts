@@ -19,7 +19,7 @@ import {
 import { parseResponse, serializeRequest, parseChunkedEncoding } from "./message.js";
 import { decompressBody, type DecompressionProvider } from "./decompress.js";
 import { assertNever, createId, createDeferred, decodeAscii } from "./utils.js";
-import { nodeRandomSource } from "@browsercore/transport";
+import { createRandomSource } from "@browsercore/transport";
 import {
     ConnectionClosedError,
     ConnectionClosingError,
@@ -368,7 +368,7 @@ export class Http1ConnectionImpl implements Http1Connection {
  * it with the HTTP/1.1 protocol state machine.
  */
 export function connectHttp1(options: Http1Options): Promise<Http1Connection> {
-    const random = options.random ?? nodeRandomSource;
+    const random = options.random ?? createRandomSource();
     // Resolve the clock: explicit option → platform.time.clock → systemClock.
     const clock = options.clock
         ?? options.platform?.time?.clock

@@ -7,9 +7,6 @@
 
 import { systemClock, type Http1ConnectionId, type Clock, type RandomSource } from "./types.js";
 import { DecodeError } from "./errors.js";
-import { nodeRandomSource } from "@browsercore/transport";
-
-export { nodeRandomSource };
 
 /**
  * Exhaustiveness check for `switch`/`if-else` over discriminated unions.
