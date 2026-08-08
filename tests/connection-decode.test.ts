@@ -1,15 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { EventEmitter } from "node:events";
-import type { Transport } from "@browsercore/transport";
+import { FakeTransportBase } from "./test-helpers.js";
 import { compression } from "@browsercore/compression";
 import { gzipSync, brotliCompressSync } from "node:zlib";
 import { connectHttp1 } from "../src/connection.js";
 import type { HttpRequest } from "../src/types.js";
 
-/** A fake in-memory transport that answers each write with a queued response. */
-class FakeTransport extends EventEmitter implements Transport {
-    public readonly id = "fake" as Transport["id"];
-    public state: Transport["state"] = { state: "open" };
+/**
+ * A fake in-memory transport that answers each write with a queued response.
+ * Composes an injected EventProvider (via FakeTransportBase) rather than
+ * extending node:events — matches the production Transport pattern.
+ */
+class FakeTransport extends FakeTransportBase {
     private readonly responses: Uint8Array[] = [];
 
     public queueResponse(bytes: Uint8Array): void {
@@ -20,17 +21,8 @@ class FakeTransport extends EventEmitter implements Transport {
         void data;
         const next = this.responses.shift();
         if (next !== undefined) {
-            queueMicrotask(() => this.emit("data", next));
+            queueMicrotask(() => this.events.emit("data", next));
         }
-    }
-
-    public read(): Promise<Uint8Array> {
-        return Promise.resolve(new Uint8Array(0));
-    }
-
-    public async close(): Promise<void> {
-        this.state = { state: "closed", reason: { kind: "client_close" } };
-        this.emit("close", false);
     }
 }
 

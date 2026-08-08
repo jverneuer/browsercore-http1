@@ -72,7 +72,10 @@ try {
 ```
 
 `@browsercore/compression` wraps `node:zlib`; `@browsercore/http1` calls it
-never `node:zlib` directly.
+never `node:zlib` directly. `@browsercore/http1` does NOT import `node:events`
+— event emission is composed exclusively through the injected `EventProvider`
+on the `Transport` it consumes (browsersmith is the composition root that
+provides the runtime backend).
 
 ## Position in BrowserCore
 
