@@ -166,7 +166,7 @@ export interface Http1Options {
      * Content-encoding decompression backend. http1 does NOT own a zlib
      * provider — it depends only on the {@link DecompressionProvider}
      * interface, never on a concrete implementation. The @browsercore/fetch
-     * layer injects its `@browsercore/compression` singleton here.
+     * layer injects its platform compression adapter here.
      *
      * When absent and a response carries a `content-encoding`, the connection
      * raises {@link ContentEncodingError} rather than returning corrupt bytes.
