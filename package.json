@@ -40,6 +40,7 @@
         "lint": "oxlint --type-aware src/"
     },
     "dependencies": {
+        "@browsercore/contracts": "0.2.2",
         "@browsercore/transport": "0.2.4"
     },
     "devDependencies": {

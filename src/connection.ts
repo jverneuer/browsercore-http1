@@ -17,7 +17,7 @@ import {
     systemClock,
 } from "./types.js";
 import { parseResponse, serializeRequest, parseChunkedEncoding } from "./message.js";
-import { decompressBody } from "./decompress.js";
+import { decompressBody, type DecompressionProvider } from "./decompress.js";
 import { assertNever, createId, createDeferred, decodeAscii } from "./utils.js";
 import { nodeRandomSource } from "@browsercore/transport";
 import {
@@ -40,6 +40,15 @@ import {
 export class Http1ConnectionImpl implements Http1Connection {
     public readonly id: Http1ConnectionId;
     public state: Http1ConnectionState = { state: "idle" };
+
+    /**
+     * Resolved decompression backend. Prefers the explicit
+     * {@link Http1Options.decompressionProvider}, then
+     * {@link Http1Options.platform}.compression. When both are absent and a
+     * response carries a `content-encoding`, the connection raises
+     * {@link ContentEncodingError}.
+     */
+    private readonly decompressionProvider: DecompressionProvider | undefined;
 
     /**
      * Incoming bytes not yet consumed by a parsed response. Drained by
@@ -70,6 +79,9 @@ export class Http1ConnectionImpl implements Http1Connection {
         private readonly options: Http1Options,
     ) {
         this.id = id;
+        // Resolve the decompression backend: explicit option → platform.compression.
+        this.decompressionProvider = options.decompressionProvider
+            ?? options.platform?.compression;
         this.options.transport.on("data", (chunk: Uint8Array): void => {
             this.appendBuffer(chunk);
             const waiter = this.dataWaiters.shift();
@@ -247,7 +259,7 @@ export class Http1ConnectionImpl implements Http1Connection {
 
         const contentEncoding = response.headers.get("content-encoding");
         if (contentEncoding !== undefined) {
-            const provider = this.options.decompressionProvider;
+            const provider = this.decompressionProvider;
             if (provider === undefined) {
                 // No backend was injected — we cannot safely decode. Raising
                 // here keeps the "no corrupt bytes" invariant instead of
@@ -357,6 +369,10 @@ export class Http1ConnectionImpl implements Http1Connection {
  */
 export function connectHttp1(options: Http1Options): Promise<Http1Connection> {
     const random = options.random ?? nodeRandomSource;
-    const id = createId("http1", random, options.clock ?? systemClock);
+    // Resolve the clock: explicit option → platform.time.clock → systemClock.
+    const clock = options.clock
+        ?? options.platform?.time?.clock
+        ?? systemClock;
+    const id = createId("http1", random, clock);
     return Promise.resolve(new Http1ConnectionImpl(id, options));
 }
