@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EventEmitter } from "node:events";
-import type { Transport } from "@browsercore/transport";
+import { FakeTransportBase } from "./test-helpers.js";
 import { connectHttp1 } from "../src/connection.js";
 import type { HttpRequest } from "../src/types.js";
 
@@ -8,33 +7,33 @@ import type { HttpRequest } from "../src/types.js";
  * A transport the test drives by hand — push bytes and close events on its own
  * schedule. Lets us exercise the empty-data-frame path, the cookie seam, and
  * byte-at-a-time reassembly.
+ * Composes an injected EventProvider (via FakeTransportBase) rather than
+ * extending node:events — matches the production Transport pattern.
  */
-class ControllableTransport extends EventEmitter implements Transport {
-    public readonly id = "ctrl" as Transport["id"];
-    public state: Transport["state"] = { state: "open" };
+class ControllableTransport extends FakeTransportBase {
     public readonly written: Uint8Array[] = [];
+
+    public constructor() {
+        super("ctrl");
+    }
 
     public async write(data: Uint8Array): Promise<void> {
         this.written.push(data);
     }
 
-    public read(): Promise<Uint8Array> {
-        return Promise.resolve(new Uint8Array(0));
-    }
-
     public async close(): Promise<void> {
         this.state = { state: "closed", reason: { kind: "client_close" } };
-        this.emit("close", false);
+        this.events.emit("close", false);
     }
 
     /** Emit a `data` event synchronously, as a real socket would. */
     public pushData(chunk: Uint8Array): void {
-        this.emit("data", chunk);
+        this.events.emit("data", chunk);
     }
 
     /** Emit a `close` event without going through the graceful handshake. */
     public closeRemote(): void {
-        this.emit("close", false);
+        this.events.emit("close", false);
     }
 }
 

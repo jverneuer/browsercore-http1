@@ -7,6 +7,7 @@
 
 import type { RandomSource, Transport } from "@browsercore/transport";
 import type { DecompressionProvider } from "./decompress.js";
+import type { Platform } from "@browsercore/contracts";
 
 // Re-export RandomSource so internal modules can import it from ./types.js
 // without each reaching for the transport package directly.
@@ -165,22 +166,38 @@ export interface Http1Options {
      * Content-encoding decompression backend. http1 does NOT own a zlib
      * provider — it depends only on the {@link DecompressionProvider}
      * interface, never on a concrete implementation. The @browsercore/fetch
-     * layer injects its `@browsercore/compression` singleton here.
+     * layer injects its platform compression adapter here.
      *
      * When absent and a response carries a `content-encoding`, the connection
      * raises {@link ContentEncodingError} rather than returning corrupt bytes.
+     * Ignored when {@link decompressionProvider} is supplied by
+     * {@link platform}.
      */
     readonly decompressionProvider?: DecompressionProvider;
     /**
      * Clock for time-dependent operations. Defaults to {@link systemClock}
      * (delegates to `Date.now()`). Inject a deterministic clock for
-     * reproducible ids in tests.
+     * reproducible ids in tests. Ignored when {@link clock} is supplied by
+     * {@link platform}.
      */
     readonly clock?: Clock;
     /**
      * Source of cryptographically-strong random bytes. Used for connection IDs
-     * and any other randomness needs. Defaults to `nodeRandomSource` (drawn
-     * from `node:crypto.randomBytes`) when not provided.
+     * and any other randomness needs. Defaults to a `node:crypto.randomBytes`
+     * backed source (via `createRandomSource()`) when not provided.
      */
     readonly random?: RandomSource;
+    /**
+     * The Platform composition root. When supplied, any service not passed as
+     * an individual field is resolved from here: `decompressionProvider` from
+     * `platform.compression` and `clock` from `platform.time.clock`.
+     * Individual fields always take precedence over the platform-supplied
+     * value, so existing callers that pass `decompressionProvider`/`clock`
+     * directly keep working unchanged.
+     *
+     * This is the migration path toward DI through Platform: callers move
+     * from passing individual service fields to threading a single Platform
+     * through every protocol package.
+     */
+    readonly platform?: Platform;
 }

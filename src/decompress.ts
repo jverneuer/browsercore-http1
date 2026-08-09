@@ -22,7 +22,7 @@ import { ContentEncodingError } from "./errors.js";
  *
  * http1 depends only on this interface, never on a concrete zlib provider.
  * The caller (typically @browsercore/fetch) injects an implementation —
- * usually the `@browsercore/compression` singleton. `decompress` receives the
+ * the platform's compression adapter (composed in browsersmith). `decompress`
  * full body bytes and the `content-encoding` header value and must return the
  * decoded bytes; it may throw on an unsupported or corrupt stream (http1 wraps
  * any thrown error as a {@link ContentEncodingError}).

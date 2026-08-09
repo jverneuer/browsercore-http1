@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EventEmitter } from "node:events";
-import type { Transport } from "@browsercore/transport";
+import { FakeTransportBase } from "./test-helpers.js";
 import { connectHttp1 } from "../src/connection.js";
 import type { HttpRequest } from "../src/types.js";
 
@@ -8,10 +7,10 @@ import type { HttpRequest } from "../src/types.js";
  * A fake in-memory transport that answers each write with a queued response.
  * Tracks how many times the transport was opened so a test can assert that
  * two sequential requests reused the same connection (open-count stays 1).
+ * Composes an injected EventProvider (via FakeTransportBase) rather than
+ * extending node:events — matches the production Transport pattern.
  */
-class FakeTransport extends EventEmitter implements Transport {
-    public readonly id = "fake" as Transport["id"];
-    public state: Transport["state"] = { state: "open" };
+class FakeTransport extends FakeTransportBase {
     public readonly written: Uint8Array[] = [];
     private readonly responses: Uint8Array[] = [];
 
@@ -23,17 +22,8 @@ class FakeTransport extends EventEmitter implements Transport {
         this.written.push(data);
         const next = this.responses.shift();
         if (next !== undefined) {
-            queueMicrotask(() => this.emit("data", next));
+            queueMicrotask(() => this.events.emit("data", next));
         }
-    }
-
-    public read(): Promise<Uint8Array> {
-        return Promise.resolve(new Uint8Array(0));
-    }
-
-    public async close(): Promise<void> {
-        this.state = { state: "closed", reason: { kind: "client_close" } };
-        this.emit("close", false);
     }
 }
 

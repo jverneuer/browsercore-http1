@@ -72,7 +72,27 @@ try {
 ```
 
 `@browsercore/compression` wraps `node:zlib`; `@browsercore/http1` calls it
-never `node:zlib` directly.
+never `node:zlib` directly. `@browsercore/http1` does NOT import `node:events`
+— event emission is composed exclusively through the injected `EventProvider`
+on the `Transport` it consumes (browsersmith is the composition root that
+provides the runtime backend).
+
+## Platform threading
+
+`Http1Options` accepts an optional `platform?: Platform` field. When supplied,
+any service not passed as an individual field is resolved from the Platform
+composition root:
+
+| Option field | Resolved from |
+| --- | --- |
+| `decompressionProvider` | `platform.compression` |
+| `clock` | `platform.time.clock` |
+
+Individual fields always take precedence, so existing callers that pass
+`decompressionProvider`/`clock` directly keep working unchanged. This is the
+migration path toward DI through Platform: callers move from passing individual
+service fields to threading a single Platform (assembled by `browsersmith`) through
+every protocol package. See `@browsercore/contracts` for the `Platform` interface.
 
 ## Position in BrowserCore
 
