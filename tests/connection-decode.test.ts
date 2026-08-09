@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { FakeTransportBase } from "./test-helpers.js";
-import { compression } from "@browsercore/compression";
+import { FakeTransportBase, createTestDecompressionProvider } from "./test-helpers.js";
 import { gzipSync, brotliCompressSync } from "node:zlib";
 import { connectHttp1 } from "../src/connection.js";
 import type { HttpRequest } from "../src/types.js";
+
+// node:zlib-backed decompression backend — the `compression` singleton was
+// removed from @browsercore/compression (0.2.1); tests inject their own.
+const compression = createTestDecompressionProvider();
 
 /**
  * A fake in-memory transport that answers each write with a queued response.

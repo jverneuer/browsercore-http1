@@ -82,7 +82,11 @@ export class Http1ConnectionImpl implements Http1Connection {
         // Resolve the decompression backend: explicit option → platform.compression.
         this.decompressionProvider = options.decompressionProvider
             ?? options.platform?.compression;
-        this.options.transport.on("data", (chunk: Uint8Array): void => {
+        // Transport's EventProvider.on emits with a generic
+        // `(...args: unknown[])` signature — narrow the first arg to the byte
+        // chunk this stream surface always delivers.
+        this.options.transport.on("data", (...args: unknown[]): void => {
+            const chunk = args[0] as Uint8Array;
             this.appendBuffer(chunk);
             const waiter = this.dataWaiters.shift();
             if (waiter !== undefined) {

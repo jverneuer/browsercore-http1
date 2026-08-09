@@ -8,10 +8,16 @@
  * - `FakeTransportBase` — base class that implements the Transport event
  *   surface via composition over an injected EventProvider, so test
  *   subclasses stay focused on the transport behavior being tested.
+ * - `createTestDecompressionProvider()` — a node:zlib-backed
+ *   {@link DecompressionProvider} for tests that exercise real
+ *   content-encoding round-trips. The `compression` singleton was removed
+ *   from @browsercore/compression (0.2.1); tests now inject their own.
  */
 
+import { gunzipSync, inflateSync, inflateRawSync, brotliDecompressSync } from "node:zlib";
 import type { EventProvider } from "@browsercore/contracts";
 import type { Transport } from "@browsercore/transport";
+import type { DecompressionProvider } from "../src/decompress.js";
 
 /**
  * Create a minimal in-memory EventProvider. Stand-in for the Node
@@ -124,4 +130,42 @@ export class FakeTransportBase implements Transport {
         this.state = { state: "closed", reason: { kind: "client_close" } };
         this.events.emit("close", false);
     }
+}
+
+/**
+ * Build a node:zlib-backed {@link DecompressionProvider} for tests.
+ *
+ * Stand-in for the platform compression adapter browsersmith injects in
+ * production — @browsercore/compression (0.2.1) exports only types and
+ * utilities (the `compression` singleton was removed), so tests wire their
+ * own decompression backend here. Mirrors browser tolerance for `deflate`
+ * (try zlib-wrapped first, fall back to raw headerless deflate). Unsupported
+ * or corrupt streams throw so http1's `decompressBody` wraps them as
+ * `ContentEncodingError`.
+ *
+ * @returns A fresh stateless {@link DecompressionProvider}.
+ */
+export function createTestDecompressionProvider(): DecompressionProvider {
+    return {
+        decompress(data: Uint8Array, encoding: string): Uint8Array {
+            switch (encoding) {
+                case "gzip":
+                case "x-gzip":
+                    return new Uint8Array(gunzipSync(data));
+                case "deflate": {
+                    // Servers disagree on deflate framing: try zlib-wrapped
+                    // first, fall back to raw deflate (browser-compatible).
+                    try {
+                        return new Uint8Array(inflateSync(data));
+                    } catch {
+                        return new Uint8Array(inflateRawSync(data));
+                    }
+                }
+                case "br":
+                    return new Uint8Array(brotliDecompressSync(data));
+                default:
+                    throw new Error(`unsupported content-encoding: ${encoding}`);
+            }
+        },
+    };
 }
