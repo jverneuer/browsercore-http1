@@ -1,7 +1,7 @@
 {
     "name": "@browsercore/http1",
-    "version": "0.2.1",
-    "description": "HTTP/1.1 client over any duplex byte stream. No knowledge of TLS or TCP \u2014 only the protocol.",
+    "version": "0.2.2",
+    "description": "HTTP/1.1 client over any duplex byte stream. No knowledge of TLS or TCP — only the protocol.",
     "repository": {
         "type": "git",
         "url": "https://github.com/jverneuer/browsercore-http1.git"
@@ -40,11 +40,10 @@
         "lint": "oxlint --type-aware src/"
     },
     "dependencies": {
-        "@browsercore/contracts": "0.2.2",
-        "@browsercore/transport": "0.2.5"
+        "@browsercore/transport": "0.2.4"
     },
     "devDependencies": {
-        "@browsercore/compression": "0.2.1",
+        "@browsercore/compression": "0.2.0",
         "@types/node": "^26.1.2",
         "@vitest/coverage-v8": "^4.1.10",
         "oxlint": "^1.76.0",

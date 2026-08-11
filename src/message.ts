@@ -5,7 +5,7 @@
  * tested in isolation and composed over any byte stream.
  */
 
-import type { HttpRequest, HttpResponse } from "./types.js";
+import type { HeaderCasing, HttpRequest, HttpResponse } from "./types.js";
 import { InvalidResponseError, ChunkEncodingError } from "./errors.js";
 import { assertNever, decodeAscii, consumeTrailers } from "./utils.js";
 
@@ -24,16 +24,44 @@ export interface ParseResponseResult {
 }
 
 /**
+ * Format a header field name according to the requested casing mode.
+ *
+ * - `lowercase` — RFC 7230 §3.2 convention; matches `node:http` (default).
+ * - `title` — first letter capitalized, rest lowercased. Mirrors the mixed-case
+ *   header names real browsers emit over HTTP/1.1 (e.g. `Content-Type`).
+ * - `original` — name returned verbatim, exactly as stored by the caller.
+ *
+ * The `default` arm uses {@link assertNever} so adding a new {@link HeaderCasing}
+ * variant forces this function to compile-error until handled.
+ */
+export function formatHeaderName(name: string, mode: HeaderCasing = "lowercase"): string {
+    switch (mode) {
+        case "lowercase":
+            return name.toLowerCase();
+        case "title":
+            return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+        case "original":
+            return name;
+        default:
+            return assertNever(mode);
+    }
+}
+
+/**
  * Serialize an HTTP/1.1 request into wire bytes.
  *
  * Produces `request-line CRLF headers CRLF body` per RFC 7230. The body is
  * appended verbatim — chunking and content-length are the caller's concern.
+ *
+ * Header field names are cased per {@link HttpRequest.headerCasing}
+ * (default `lowercase`). Headers iterate in `Map` insertion order so callers
+ * control the on-the-wire ordering.
  */
 export function serializeRequest(req: HttpRequest): Uint8Array {
     const lines: string[] = [`${req.method} ${req.url} HTTP/1.1`];
+    const casing: HeaderCasing = req.headerCasing ?? "lowercase";
     for (const [name, value] of req.headers) {
-        // node:http lowercases header names on the wire (RFC 7230 §3.2); match it.
-        lines.push(`${name.toLowerCase()}: ${value}`);
+        lines.push(`${formatHeaderName(name, casing)}: ${value}`);
     }
     lines.push("", "");
     const headerBytes = new TextEncoder().encode(lines.join("\r\n"));
