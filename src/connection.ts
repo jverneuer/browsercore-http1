@@ -17,9 +17,8 @@ import {
     systemClock,
 } from "./types.js";
 import { parseResponse, serializeRequest, parseChunkedEncoding } from "./message.js";
-import { decompressBody, type DecompressionProvider } from "./decompress.js";
-import { assertNever, createId, createDeferred, decodeAscii } from "./utils.js";
-import { createRandomSource } from "@browsercore/transport";
+import { decompressBody } from "./decompress.js";
+import { assertNever, createId, createDeferred, decodeAscii, nodeRandomSource } from "./utils.js";
 import {
     ConnectionClosedError,
     ConnectionClosingError,
@@ -40,15 +39,6 @@ import {
 export class Http1ConnectionImpl implements Http1Connection {
     public readonly id: Http1ConnectionId;
     public state: Http1ConnectionState = { state: "idle" };
-
-    /**
-     * Resolved decompression backend. Prefers the explicit
-     * {@link Http1Options.decompressionProvider}, then
-     * {@link Http1Options.platform}.compression. When both are absent and a
-     * response carries a `content-encoding`, the connection raises
-     * {@link ContentEncodingError}.
-     */
-    private readonly decompressionProvider: DecompressionProvider | undefined;
 
     /**
      * Incoming bytes not yet consumed by a parsed response. Drained by
@@ -79,12 +69,9 @@ export class Http1ConnectionImpl implements Http1Connection {
         private readonly options: Http1Options,
     ) {
         this.id = id;
-        // Resolve the decompression backend: explicit option → platform.compression.
-        this.decompressionProvider = options.decompressionProvider
-            ?? options.platform?.compression;
-        // Transport's EventProvider.on emits with a generic
-        // `(...args: unknown[])` signature — narrow the first arg to the byte
-        // chunk this stream surface always delivers.
+        // The transport's EventProvider surface is string-event typed
+        // (`(...args: unknown[]) => void`); the "data" event always carries a
+        // single Uint8Array payload, narrowed here at the boundary.
         this.options.transport.on("data", (...args: unknown[]): void => {
             const chunk = args[0] as Uint8Array;
             this.appendBuffer(chunk);
@@ -263,7 +250,7 @@ export class Http1ConnectionImpl implements Http1Connection {
 
         const contentEncoding = response.headers.get("content-encoding");
         if (contentEncoding !== undefined) {
-            const provider = this.decompressionProvider;
+            const provider = this.options.decompressionProvider;
             if (provider === undefined) {
                 // No backend was injected — we cannot safely decode. Raising
                 // here keeps the "no corrupt bytes" invariant instead of
@@ -372,11 +359,7 @@ export class Http1ConnectionImpl implements Http1Connection {
  * it with the HTTP/1.1 protocol state machine.
  */
 export function connectHttp1(options: Http1Options): Promise<Http1Connection> {
-    const random = options.random ?? createRandomSource();
-    // Resolve the clock: explicit option → platform.time.clock → systemClock.
-    const clock = options.clock
-        ?? options.platform?.time?.clock
-        ?? systemClock;
-    const id = createId("http1", random, clock);
+    const random = options.random ?? nodeRandomSource;
+    const id = createId("http1", random, options.clock ?? systemClock);
     return Promise.resolve(new Http1ConnectionImpl(id, options));
 }

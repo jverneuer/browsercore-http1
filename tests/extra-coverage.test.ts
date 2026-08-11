@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { EventEmitter } from "node:events";
 import { gzipSync } from "node:zlib";
-import { FakeTransportBase, createTestDecompressionProvider } from "./test-helpers.js";
+import type { Transport } from "@browsercore/transport";
+import { zlibDecompressionProvider as compression } from "./helpers/zlib-provider.js";
 import { connectHttp1 } from "../src/connection.js";
 import { ContentEncodingError } from "../src/errors.js";
 import { followRedirects } from "../src/redirect.js";
@@ -12,18 +14,14 @@ import type {
     HttpResponse,
 } from "../src/types.js";
 
-// node:zlib-backed decompression backend — the `compression` singleton was
-// removed from @browsercore/compression (0.2.1); tests inject their own.
-const compression = createTestDecompressionProvider();
-
 /**
  * A fake in-memory transport that answers each write with a queued response.
  * Mirrors the pattern used across the suite — queue raw wire bytes, emit them
  * on the next microtask after a write, just as a real socket would.
- * Composes an injected EventProvider (via FakeTransportBase) rather than
- * extending node:events — matches the production Transport pattern.
  */
-class FakeTransport extends FakeTransportBase {
+class FakeTransport extends EventEmitter implements Transport {
+    public readonly id = "fake" as Transport["id"];
+    public state: Transport["state"] = { state: "open" };
     public readonly written: Uint8Array[] = [];
     private readonly responses: Uint8Array[] = [];
 
@@ -35,8 +33,17 @@ class FakeTransport extends FakeTransportBase {
         this.written.push(data);
         const next = this.responses.shift();
         if (next !== undefined) {
-            queueMicrotask(() => this.events.emit("data", next));
+            queueMicrotask(() => this.emit("data", next));
         }
+    }
+
+    public read(): Promise<Uint8Array> {
+        return Promise.resolve(new Uint8Array(0));
+    }
+
+    public async close(): Promise<void> {
+        this.state = { state: "closed", reason: { kind: "client_close" } };
+        this.emit("close", false);
     }
 }
 

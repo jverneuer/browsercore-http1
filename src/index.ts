@@ -22,6 +22,7 @@ export {
     type Headers,
     type ParseResponseResult,
     type StartLine,
+    formatHeaderName,
     parseChunkedEncoding,
     parseResponse,
     serializeRequest,
@@ -50,10 +51,11 @@ export {
     type Http1Options,
     type HttpBodyKind,
     type HttpMethod,
+    type HeaderCasing,
     type HttpRequest,
     type HttpResponse,
     type CookieInterceptor,
     type CookieUrl,
 } from "./types.js";
 
-export { assertNever } from "./utils.js";
+export { assertNever, nodeRandomSource } from "./utils.js";

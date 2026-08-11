@@ -7,6 +7,16 @@
 
 import { systemClock, type Http1ConnectionId, type Clock, type RandomSource } from "./types.js";
 import { DecodeError } from "./errors.js";
+import { createRandomSource } from "@browsercore/transport";
+
+/**
+ * Default {@link RandomSource} backed by `node:crypto.randomBytes`.
+ *
+ * @browsercore/transport exposes a factory (`createRandomSource`) rather than a
+ * shared instance; we materialize one default source here so the rest of http1
+ * (and downstream callers via the public re-export) can reference a stable name.
+ */
+export const nodeRandomSource: RandomSource = createRandomSource();
 
 /**
  * Exhaustiveness check for `switch`/`if-else` over discriminated unions.

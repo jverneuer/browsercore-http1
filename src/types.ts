@@ -7,7 +7,6 @@
 
 import type { RandomSource, Transport } from "@browsercore/transport";
 import type { DecompressionProvider } from "./decompress.js";
-import type { Platform } from "@browsercore/contracts";
 
 // Re-export RandomSource so internal modules can import it from ./types.js
 // without each reaching for the transport package directly.
@@ -40,13 +39,30 @@ export type HttpBodyKind =
     | { readonly kind: "empty" }
     | { readonly kind: "bytes"; readonly data: Uint8Array };
 
+/**
+ * How header field names are cased when serialized to the wire by
+ * {@link serializeRequest}.
+ *
+ * - `lowercase` — RFC 7230 §3.2 convention; matches `node:http` (default).
+ * - `title` — first letter capitalized, rest lowercased. Real browsers send
+ *   mixed-case header names over HTTP/1.1 (e.g. `Content-Type`, `User-Agent`);
+ *   this mode reproduces that for impersonation.
+ * - `original` — names emitted verbatim, exactly as stored by the caller.
+ */
+export type HeaderCasing = "lowercase" | "title" | "original";
+
 /** A fully-serializable HTTP/1.1 request. */
 export interface HttpRequest {
     readonly method: HttpMethod;
     readonly url: string;
-    /** Headers are case-insensitive once serialized — stored as a ReadonlyMap. */
+    /** Headers are stored as a ReadonlyMap (case-insensitive on the wire). */
     readonly headers: ReadonlyMap<string, string>;
     readonly body: HttpBodyKind;
+    /**
+     * Controls how header field names are cased on the wire. Defaults to
+     * `lowercase` for backward compatibility when omitted.
+     */
+    readonly headerCasing?: HeaderCasing;
 }
 
 /** A parsed HTTP/1.1 response. */
@@ -166,38 +182,22 @@ export interface Http1Options {
      * Content-encoding decompression backend. http1 does NOT own a zlib
      * provider — it depends only on the {@link DecompressionProvider}
      * interface, never on a concrete implementation. The @browsercore/fetch
-     * layer injects its platform compression adapter here.
+     * layer injects its `@browsercore/compression` singleton here.
      *
      * When absent and a response carries a `content-encoding`, the connection
      * raises {@link ContentEncodingError} rather than returning corrupt bytes.
-     * Ignored when {@link decompressionProvider} is supplied by
-     * {@link platform}.
      */
     readonly decompressionProvider?: DecompressionProvider;
     /**
      * Clock for time-dependent operations. Defaults to {@link systemClock}
      * (delegates to `Date.now()`). Inject a deterministic clock for
-     * reproducible ids in tests. Ignored when {@link clock} is supplied by
-     * {@link platform}.
+     * reproducible ids in tests.
      */
     readonly clock?: Clock;
     /**
      * Source of cryptographically-strong random bytes. Used for connection IDs
-     * and any other randomness needs. Defaults to a `node:crypto.randomBytes`
-     * backed source (via `createRandomSource()`) when not provided.
+     * and any other randomness needs. Defaults to `nodeRandomSource` (a
+     * `node:crypto.randomBytes`-backed source) when not provided.
      */
     readonly random?: RandomSource;
-    /**
-     * The Platform composition root. When supplied, any service not passed as
-     * an individual field is resolved from here: `decompressionProvider` from
-     * `platform.compression` and `clock` from `platform.time.clock`.
-     * Individual fields always take precedence over the platform-supplied
-     * value, so existing callers that pass `decompressionProvider`/`clock`
-     * directly keep working unchanged.
-     *
-     * This is the migration path toward DI through Platform: callers move
-     * from passing individual service fields to threading a single Platform
-     * through every protocol package.
-     */
-    readonly platform?: Platform;
 }

@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { gzipSync, deflateSync, deflateRawSync, brotliCompressSync, brotliDecompressSync } from "node:zlib";
-import { createTestDecompressionProvider } from "./test-helpers.js";
+import { zlibDecompressionProvider } from "./helpers/zlib-provider.js";
 import type { DecompressionProvider } from "../src/decompress.js";
 import { decompressBody, isSupportedContentEncoding } from "../src/decompress.js";
 import { ContentEncodingError } from "../src/errors.js";
 
 const payload = "the quick brown fox jumps over the lazy dog.".repeat(16);
-// node:zlib-backed decompression backend — the `compression` singleton was
-// removed from @browsercore/compression (0.2.1); tests inject their own.
-const compression: DecompressionProvider = createTestDecompressionProvider();
+
+/** Local alias for the test decompression backend. */
+const compression = zlibDecompressionProvider;
 
 function enc(s: string): Uint8Array {
     return new TextEncoder().encode(s);
