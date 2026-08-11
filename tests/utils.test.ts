@@ -81,6 +81,16 @@ describe("createId", () => {
         // Randomness + timestamp should never collide in practice.
         expect(createId("x", createRandomSource())).not.toBe(createId("x", createRandomSource()));
     });
+
+    it("handles short random bytes without throwing (noUncheckedIndexedAccess guard)", () => {
+        // createId accesses bytes[0], [1], [2] with ?? 0 fallbacks.
+        // A random source returning fewer than 3 bytes exercises those guards.
+        const shortRandom = {
+            randomBytes: (n: number) => new Uint8Array(Math.max(0, n - 2)),
+        };
+        const id = createId("test", shortRandom);
+        expect(id.startsWith("test_")).toBe(true);
+    });
 });
 
 describe("assertNever", () => {
