@@ -52,15 +52,15 @@ describe("parseResponse", () => {
         const raw = "HTTP/1.1 200 OK\r\ncontent-type: text/plain\r\ncontent-length: 5\r\n\r\nhello";
         const buf = new TextEncoder().encode(raw);
         const { response, bytesConsumed } = parseResponse(buf);
-        expect(response).toEqual({
-            statusCode: 200,
-            statusText: "OK",
-            headers: new Map([
-                ["content-type", "text/plain"],
-                ["content-length", "5"],
-            ]),
-            body: new TextEncoder().encode("hello"),
-        });
+        // headers is a ParsedHeaders container (flat last-wins ReadonlyMap view
+        // plus getHeaderValues) — compared through its flat entries view.
+        expect(response.statusCode).toBe(200);
+        expect(response.statusText).toBe("OK");
+        expect([...response.headers.entries()]).toEqual([
+            ["content-type", "text/plain"],
+            ["content-length", "5"],
+        ]);
+        expect(response.body).toEqual(new TextEncoder().encode("hello"));
         expect(bytesConsumed).toBe(raw.length);
     });
 

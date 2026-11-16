@@ -45,6 +45,9 @@ try {
 | `Http1ConnectionImpl` | class | Concrete connection (serial request/response) |
 | `HttpRequest` | interface | Serializable request |
 | `HttpResponse` | interface | Parsed response |
+| `ParsedHeaders` | interface | Parsed header container — flat last-wins `ReadonlyMap` view plus `getHeaderValues(name)` (every value in wire order) |
+| `ParsedHeadersImpl` | class | Immutable `ParsedHeaders` implementation built by `parseResponse` |
+| `ParsedHeaderPair` | interface | One ordered `[name, value]` wire pair |
 | `HttpBodyKind` | discriminated union | `empty` / `bytes` body |
 | `HttpMethod` | literal union | Supported HTTP methods |
 | `Http1ConnectionState` | discriminated union | `idle \| in_flight \| closing \| closed` |

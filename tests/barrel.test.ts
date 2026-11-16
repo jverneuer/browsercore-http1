@@ -18,6 +18,7 @@ import {
     isRedirectStatus,
     resolveRedirectUrl,
     assertNever,
+    ParsedHeadersImpl,
 } from "../src/index.js";
 
 describe("barrel re-exports", () => {
