@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ParsedHeadersImpl } from "../src/types.js";
 import type { Http1CloseReason } from "../src/types.js";
 import {
     findHeaderEnd,
@@ -202,20 +203,34 @@ describe("materialize", () => {
 });
 
 describe("collectSetCookie", () => {
-    // NOTE: parseResponse stores headers in a Map<string,string>, so duplicate
-    // header field names collapse to their last value. In practice this means
-    // collectSetCookie observes at most one "set-cookie" entry per response —
-    // a real limitation for servers that send multiple Set-Cookie headers.
+    // Since issue #43 the parsed container preserves the ordered pair list,
+    // so collectSetCookie observes EVERY "set-cookie" entry per response, in
+    // wire order — the cookie seam (storeCookies) receives them all.
     it("collects a set-cookie value, skipping unrelated headers", () => {
-        const headers = new Map<string, string>([
-            ["content-type", "text/html"],
-            ["set-cookie", "a=1"],
+        const headers = new ParsedHeadersImpl([
+            { name: "content-type", value: "text/html" },
+            { name: "set-cookie", value: "a=1" },
         ]);
         expect(collectSetCookie(headers)).toEqual(["a=1"]);
     });
 
+    it("collects EVERY set-cookie value in wire order, verbatim (no joining)", () => {
+        const headers = new ParsedHeadersImpl([
+            { name: "set-cookie", value: "session=abc; Path=/" },
+            { name: "content-type", value: "text/html" },
+            {
+                name: "set-cookie",
+                value: "prefs=dark; Expires=Wed, 21 Oct 2026 07:28:00 GMT; Secure",
+            },
+        ]);
+        expect(collectSetCookie(headers)).toEqual([
+            "session=abc; Path=/",
+            "prefs=dark; Expires=Wed, 21 Oct 2026 07:28:00 GMT; Secure",
+        ]);
+    });
+
     it("returns an empty array when there are no set-cookie headers", () => {
-        const headers = new Map<string, string>([["content-type", "text/html"]]);
+        const headers = new ParsedHeadersImpl([{ name: "content-type", value: "text/html" }]);
         expect(collectSetCookie(headers)).toEqual([]);
     });
 });

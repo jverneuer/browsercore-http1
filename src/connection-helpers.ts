@@ -7,7 +7,7 @@
  * consumed solely by the connection implementation.
  */
 
-import type { Http1CloseReason, HttpMethod } from "./types.js";
+import type { Http1CloseReason, HttpMethod, ParsedHeaders } from "./types.js";
 import { assertNever, decodeAscii, consumeTrailers } from "./utils.js";
 
 /** Find the offset of the `\r\n\r\n` header terminator, or -1 if not present. */
@@ -185,13 +185,15 @@ export async function materialize(stream: AsyncIterable<Uint8Array>): Promise<Ui
     return out;
 }
 
-/** Collect all `set-cookie` header values (case-insensitive) in wire order. */
-export function collectSetCookie(headers: ReadonlyMap<string, string>): string[] {
-    const out: string[] = [];
-    for (const [name, value] of headers) {
-        if (name === "set-cookie") {
-            out.push(value);
-        }
-    }
-    return out;
+/**
+ * Collect ALL `set-cookie` header values (case-insensitive) in wire order.
+ *
+ * Before issue #43 this scanned the flat record, which held at most one
+ * `set-cookie` entry (last-wins) — a server setting `session` + `csrf`
+ * cookies silently dropped one. The parsed container now keeps the ordered
+ * pair list, so each header line's value is collected verbatim, never
+ * comma-joined (Set-Cookie values contain dates with commas).
+ */
+export function collectSetCookie(headers: ParsedHeaders): string[] {
+    return [...headers.getHeaderValues("set-cookie")];
 }

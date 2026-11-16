@@ -65,11 +65,134 @@ export interface HttpRequest {
     readonly headerCasing?: HeaderCasing;
 }
 
+/** A single parsed header pair, in wire order (no framing detail). */
+export interface ParsedHeaderPair {
+    readonly name: string;
+    readonly value: string;
+}
+
+/**
+ * Parsed HTTP/1.1 headers — the container handed to consumers after
+ * `parseResponse` (`HttpResponse.headers`).
+ *
+ * Two views over the SAME wire data:
+ *
+ * - **Flat record (backward compatible):** the container IS a
+ *   `ReadonlyMap<string, string>`. Its view keeps one entry per field name
+ *   and is LAST-WINS for repeated fields — `get()`/`entries()` return only
+ *   the last value a field carried. This is the historic behaviour, kept
+ *   exactly for compatibility; consumers that only see the flat record never
+ *   observe the earlier values (issue #43: multi-`Set-Cookie` fidelity was
+ *   impossible above this layer).
+ * - **Multi-value fidelity:** {@link ParsedHeaders.getHeaderValues} returns
+ *   EVERY value a field carried, in wire order — each header line's value
+ *   verbatim as a separate entry, NOT comma-joined. `Set-Cookie` must never
+ *   be pre-joined: its values routinely contain dates and other commas
+ *   (RFC 6265bis requires recipients to handle each Set-Cookie field
+ *   individually), so folding would corrupt the data. Per RFC 9110 §5.2/§5.3
+ *   field order and multiplicity are semantically meaningful for several
+ *   fields.
+ *
+ * Field names are case-insensitive (RFC 9110 §5.1); the parser lowercases
+ * them, so lookups through either view are case-insensitive.
+ */
+export interface ParsedHeaders extends ReadonlyMap<string, string> {
+    /**
+     * All values for a field, in wire order. Empty array if the field is
+     * absent.
+     *
+     * Lookup matches the field name case-insensitively (HTTP field names are
+     * case-insensitive, RFC 9110 §5.1); the HTTP/1.1 parser lowercases names,
+     * so passing the lowercase name is the norm.
+     */
+    getHeaderValues(name: string): readonly string[];
+}
+
+/**
+ * The immutable {@link ParsedHeaders} implementation `parseResponse`
+ * assembles.
+ *
+ * The ordered pair list is the fidelity source, threaded from the parser
+ * WITHOUT deduplication; the flat record is derived from it (last-wins via
+ * `Map.set`). One object, both views — no divergence is possible.
+ */
+export class ParsedHeadersImpl implements ParsedHeaders {
+    /** Every parsed pair, in wire order — duplicates preserved. */
+    private readonly orderedPairs: readonly ParsedHeaderPair[];
+    /** Derived flat record: last-wins per name, first-occurrence iteration order. */
+    private readonly flat: ReadonlyMap<string, string>;
+
+    constructor(pairs: readonly ParsedHeaderPair[]) {
+        this.orderedPairs = pairs;
+        this.flat = new Map(pairs.map((pair) => [pair.name, pair.value] as const));
+    }
+
+    /** @inheritdoc */
+    public getHeaderValues(name: string): readonly string[] {
+        const needle = name.toLowerCase();
+        const values: string[] = [];
+        for (const pair of this.orderedPairs) {
+            if (pair.name.toLowerCase() === needle) {
+                values.push(pair.value);
+            }
+        }
+        return values;
+    }
+
+    /** @inheritdoc */
+    public get(key: string): string | undefined {
+        return this.flat.get(key);
+    }
+
+    /** @inheritdoc */
+    public has(key: string): boolean {
+        return this.flat.has(key);
+    }
+
+    /** @inheritdoc */
+    public get size(): number {
+        return this.flat.size;
+    }
+
+    /** @inheritdoc */
+    public keys(): MapIterator<string> {
+        return this.flat.keys();
+    }
+
+    /** @inheritdoc */
+    public values(): MapIterator<string> {
+        return this.flat.values();
+    }
+
+    /** @inheritdoc */
+    public entries(): MapIterator<[string, string]> {
+        return this.flat.entries();
+    }
+
+    /** @inheritdoc */
+    public [Symbol.iterator](): MapIterator<[string, string]> {
+        return this.flat[Symbol.iterator]();
+    }
+
+    /** @inheritdoc */
+    public forEach(
+        callback: (value: string, key: string, map: ReadonlyMap<string, string>) => void,
+        thisArg?: unknown,
+    ): void {
+        this.flat.forEach(callback, thisArg);
+    }
+}
+
 /** A parsed HTTP/1.1 response. */
 export interface HttpResponse {
     readonly statusCode: number;
     readonly statusText: string;
-    readonly headers: ReadonlyMap<string, string>;
+    /**
+     * Parsed response headers. Flat view is LAST-WINS for repeated fields
+     * (backward compatible); `getHeaderValues(name)` returns every value in
+     * wire order — see {@link ParsedHeaders}.
+     */
+    readonly headers: ParsedHeaders;
     readonly body: Uint8Array;
 }
 

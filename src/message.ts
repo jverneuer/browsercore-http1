@@ -5,7 +5,14 @@
  * tested in isolation and composed over any byte stream.
  */
 
-import type { HeaderCasing, HttpRequest, HttpResponse } from "./types.js";
+import {
+    type HeaderCasing,
+    type HttpRequest,
+    type HttpResponse,
+    type ParsedHeaderPair,
+    type ParsedHeaders,
+    ParsedHeadersImpl,
+} from "./types.js";
 import { InvalidResponseError, ChunkEncodingError } from "./errors.js";
 import { assertNever, decodeAscii, consumeTrailers } from "./utils.js";
 
@@ -14,8 +21,11 @@ export type StartLine =
     | { readonly kind: "request"; readonly method: string; readonly target: string; readonly version: string }
     | { readonly kind: "status"; readonly version: string; readonly statusCode: number; readonly statusText: string };
 
-/** Parsed headers — case-insensitive map. */
-export type Headers = ReadonlyMap<string, string>;
+/**
+ * Parsed headers — flat last-wins view plus `getHeaderValues()` for
+ * multi-value fidelity (see {@link ParsedHeaders}).
+ */
+export type Headers = ParsedHeaders;
 
 /** Parse result for a response — includes bytes consumed so the caller can drain. */
 export interface ParseResponseResult {
@@ -112,7 +122,11 @@ export function parseResponse(buf: Uint8Array): ParseResponseResult {
     if (statusCode < 100 || statusCode > 999) {
         throw new InvalidResponseError(text.slice(0, 120));
     }
-    const headers = new Map<string, string>();
+    // The ordered pair list is the fidelity source — duplicates are preserved
+    // in wire order (issue #43); the flat last-wins record is derived from it
+    // inside ParsedHeadersImpl. Collapsing here (the old `Map.set` loop) would
+    // make multi-`Set-Cookie` fidelity impossible above this layer.
+    const pairs: ParsedHeaderPair[] = [];
     for (const line of headerSection.split("\r\n").slice(1)) {
         const colon = line.indexOf(":");
         if (colon === -1) {
@@ -120,8 +134,9 @@ export function parseResponse(buf: Uint8Array): ParseResponseResult {
         }
         const name = line.slice(0, colon).trim().toLowerCase();
         const value = line.slice(colon + 1).trim();
-        headers.set(name, value);
+        pairs.push({ name, value });
     }
+    const headers = new ParsedHeadersImpl(pairs);
     const contentLengthHeader = headers.get("content-length");
     const transferEncoding = headers.get("transfer-encoding");
     let body: Uint8Array;

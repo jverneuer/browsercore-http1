@@ -103,14 +103,14 @@ describe("parseResponse header parsing", () => {
         expect(response.headers.get("x-dup")).toBe("two");
     });
 
-    it("collapses duplicate Set-Cookie headers to the last value", () => {
-        // KNOWN LIMITATION: headers are stored in a Map<string,string>, which
-        // can hold only one entry per name. RFC 6265 permits multiple
-        // Set-Cookie headers in a single response, but parseResponse keeps
-        // only the last — silently dropping the earlier cookie(s).
+    it("keeps the flat record last-wins for duplicate Set-Cookie headers (compat)", () => {
+        // The flat ReadonlyMap view is backward compatible: one entry per
+        // name, last-wins. Full multi-value fidelity lives on
+        // `getHeaderValues()` (issue #43) — see tests/multi-value-headers.test.ts.
         const raw = "HTTP/1.1 200 OK\r\nset-cookie: a=1\r\nset-cookie: b=2\r\n\r\n";
         const { response } = parseResponse(enc(raw));
         expect(response.headers.get("set-cookie")).toBe("b=2");
+        expect(response.headers.getHeaderValues("set-cookie")).toEqual(["a=1", "b=2"]);
     });
 
     it("returns the raw chunked body bytes without decoding", () => {

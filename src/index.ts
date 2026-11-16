@@ -54,8 +54,12 @@ export {
     type HeaderCasing,
     type HttpRequest,
     type HttpResponse,
+    type ParsedHeaderPair,
+    type ParsedHeaders,
     type CookieInterceptor,
     type CookieUrl,
 } from "./types.js";
+
+export { ParsedHeadersImpl } from "./types.js";
 
 export { assertNever, nodeRandomSource } from "./utils.js";

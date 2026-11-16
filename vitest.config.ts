@@ -12,10 +12,6 @@ export default defineConfig({
         coverage: {
             provider: "v8",
             include: ["src/**/*.ts"],
-            // types.ts is type-declaration-only — it has no executable statements,
-            // functions, or branches to cover. Excluding it keeps the report
-            // meaningful; a pure-types file can never meaningfully hit 100%.
-            exclude: ["src/types.ts"],
             all: true,
             reporter: ["text", "html", "json-summary"],
             thresholds: { statements: 94, branches: 94, functions: 94, lines: 94 },
