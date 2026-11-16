@@ -7,7 +7,7 @@
  * consumed solely by the connection implementation.
  */
 
-import type { Http1CloseReason } from "./types.js";
+import type { Http1CloseReason, HttpMethod } from "./types.js";
 import { assertNever, decodeAscii, consumeTrailers } from "./utils.js";
 
 /** Find the offset of the `\r\n\r\n` header terminator, or -1 if not present. */
@@ -43,6 +43,42 @@ export function isChunkedEncoding(headerText: string): boolean {
     }
     const value = match[1];
     return value !== undefined && value.toLowerCase().includes("chunked");
+}
+
+/**
+ * Extract the status code from the start of a response header block — the
+ * status line is the first CRLF-terminated line. Returns `undefined` when the
+ * bytes do not begin with a well-formed status line, so the caller falls back
+ * to header-driven framing for such garbage.
+ */
+export function extractStatusCode(headerText: string): number | undefined {
+    const firstLineEnd = headerText.indexOf("\r\n");
+    const statusLine = firstLineEnd >= 0 ? headerText.slice(0, firstLineEnd) : headerText;
+    const match = /^HTTP\/\d\.\d\s+(\d{3})/u.exec(statusLine);
+    if (match === null) {
+        return undefined;
+    }
+    const code = match[1];
+    return code === undefined ? undefined : Number(code);
+}
+
+/**
+ * Whether an HTTP/1.1 response is body-less by framing rules — RFC 9110 §9.3.3
+ * / RFC 9112 §6.3: a response to a HEAD request, and any 1xx (Informational),
+ * 204 (No Content) or 304 (Not Modified) response, is always terminated by the
+ * first empty line after the header fields, REGARDLESS of the header fields
+ * present. A `content-length` or `transfer-encoding` header in such a response
+ * describes what an equivalent GET would carry — never this message — so
+ * framing must never wait for body bytes on these responses.
+ */
+export function isBodylessResponse(method: HttpMethod, statusCode: number | undefined): boolean {
+    if (method === "HEAD") {
+        return true;
+    }
+    if (statusCode === undefined) {
+        return false;
+    }
+    return (statusCode >= 100 && statusCode < 200) || statusCode === 204 || statusCode === 304;
 }
 
 /**
