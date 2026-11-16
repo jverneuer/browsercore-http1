@@ -12,6 +12,7 @@ import {
     type Http1ConnectionId,
     type Http1ConnectionState,
     type Http1Options,
+    type HttpMethod,
     type HttpRequest,
     type HttpResponse,
     systemClock,
@@ -28,8 +29,10 @@ import {
     collectSetCookie,
     describeCloseReason,
     extractContentLength,
+    extractStatusCode,
     findChunkedBodyEnd,
     findHeaderEnd,
+    isBodylessResponse,
     isChunkedEncoding,
     materialize,
     chunkIterable,
@@ -107,7 +110,10 @@ export class Http1ConnectionImpl implements Http1Connection {
             }
             const wire = serializeRequest(wireReq);
             await this.options.transport.write(wire);
-            const response = await this.readResponse();
+            // The request method is part of the response's framing decision
+            // (RFC 9110 §9.3.3): a response to HEAD has no body regardless of
+            // its header fields.
+            const response = await this.readResponse(req.method);
             // Cookie seam (optional): collect response Set-Cookie headers.
             if (interceptor?.storeCookies !== undefined) {
                 interceptor.storeCookies(this.cookieUrl(wireReq), collectSetCookie(response.headers));
@@ -155,12 +161,18 @@ export class Http1ConnectionImpl implements Http1Connection {
         return s === "closed" || s === "closing";
     }
 
-    /** Read bytes from the transport until a complete response is available. */
-    private async readResponse(): Promise<HttpResponse> {
+    /**
+     * Read bytes from the transport until a complete response is available.
+     *
+     * `method` is the request method that triggered this response — a HEAD
+     * request's response is body-less by framing rules no matter what its
+     * headers claim.
+     */
+    private async readResponse(method: HttpMethod): Promise<HttpResponse> {
         while (true) {
             // Sequential parse over the accumulating buffer — each pass depends on the previous read.
             // eslint-disable-next-line no-await-in-loop
-            const parsed = await this.tryParse();
+            const parsed = await this.tryParse(method);
             if (parsed !== undefined) {
                 return parsed;
             }
@@ -185,8 +197,16 @@ export class Http1ConnectionImpl implements Http1Connection {
     /**
      * Attempt to parse a complete response from the current buffer.
      * Returns `undefined` if more bytes are needed.
+     *
+     * Framing decision (RFC 9112 §6.3, RFC 9110 §9.3.3): a response to a HEAD
+     * request, and any 1xx/204/304 response, is body-less REGARDLESS of the
+     * header fields — those headers may describe an equivalent GET, not this
+     * message. Such responses resolve on the header terminator alone; without
+     * this, a HEAD response carrying no framing headers would fall through to
+     * close-delimiting and stall a keep-alive connection until the pool
+     * timeout tears it down (issue #42).
      */
-    private async tryParse(): Promise<HttpResponse | undefined> {
+    private async tryParse(method: HttpMethod): Promise<HttpResponse | undefined> {
         const headerEnd = findHeaderEnd(this.buffer);
         if (headerEnd === -1) {
             return undefined;
@@ -194,6 +214,10 @@ export class Http1ConnectionImpl implements Http1Connection {
 
         const bodyStart = headerEnd + 4;
         const headerText = decodeAscii(this.buffer, 0, headerEnd);
+
+        if (isBodylessResponse(method, extractStatusCode(headerText))) {
+            return this.parseHeadersOnly(bodyStart);
+        }
 
         const contentLength = extractContentLength(headerText);
         const isChunked = isChunkedEncoding(headerText);
@@ -216,11 +240,26 @@ export class Http1ConnectionImpl implements Http1Connection {
             return parsed;
         }
 
-        // No content-length and not chunked — the body runs until the transport
+        // No content-length and not chunked (and not a body-less HEAD/1xx/204/304
+        // response, which was resolved above) — the body runs until the transport
         // closes, so its boundary can't be determined from headers alone. Return
         // undefined and let `readResponse` observe the close (via `readChunk`
         // resolving `undefined`) and drain whatever the buffer holds.
         return undefined;
+    }
+
+    /**
+     * Parse a body-less response (headers only) and drain exactly the header
+     * block from the buffer, keeping the connection in sync for the next
+     * request. Transfer-encoding / content-encoding decoding is skipped
+     * deliberately: the message has no body, so a `transfer-encoding: chunked`
+     * or `content-encoding` header here describes an equivalent GET's body —
+     * running the decoders on the empty body would either corrupt it or throw.
+     */
+    private parseHeadersOnly(bodyStart: number): HttpResponse {
+        const { response, bytesConsumed } = parseResponse(this.buffer.slice(0, bodyStart));
+        this.buffer = this.buffer.slice(bytesConsumed);
+        return { ...response, body: new Uint8Array(0) };
     }
 
     /**
