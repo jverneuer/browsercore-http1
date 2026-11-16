@@ -1,6 +1,6 @@
 {
     "name": "@browsercore/http1",
-    "version": "0.2.2",
+    "version": "0.2.3",
     "description": "HTTP/1.1 client over any duplex byte stream. No knowledge of TLS or TCP — only the protocol.",
     "repository": {
         "type": "git",
@@ -47,7 +47,7 @@
         "@types/node": "^26.1.2",
         "@vitest/coverage-v8": "^4.1.10",
         "oxlint": "^1.76.0",
-        "oxlint-tsgolint": "7.0.2001",
+        "oxlint-tsgolint": "7.0.2007",
         "typescript": "^7.0.0",
         "vitest": "^4.1.10"
     },

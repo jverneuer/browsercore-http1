@@ -3,6 +3,8 @@ import type { Http1CloseReason } from "../src/types.js";
 import {
     findHeaderEnd,
     extractContentLength,
+    extractStatusCode,
+    isBodylessResponse,
     isChunkedEncoding,
     findChunkedBodyEnd,
     describeCloseReason,
@@ -215,5 +217,48 @@ describe("collectSetCookie", () => {
     it("returns an empty array when there are no set-cookie headers", () => {
         const headers = new Map<string, string>([["content-type", "text/html"]]);
         expect(collectSetCookie(headers)).toEqual([]);
+    });
+});
+
+describe("extractStatusCode", () => {
+    it("extracts the status code from the status line", () => {
+        expect(extractStatusCode("HTTP/1.1 204 No Content\r\netag: \"abc\"")).toBe(204);
+        expect(extractStatusCode("HTTP/1.0 404 Not Found\r\n")).toBe(404);
+    });
+
+    it("handles a status line with no trailing CRLF (single-line header block)", () => {
+        expect(extractStatusCode("HTTP/1.1 200 OK")).toBe(200);
+    });
+
+    it("returns undefined for a malformed status line", () => {
+        expect(extractStatusCode("garbage\r\ncontent-length: 5")).toBeUndefined();
+        expect(extractStatusCode("")).toBeUndefined();
+    });
+});
+
+describe("isBodylessResponse", () => {
+    // RFC 9110 §9.3.3 / RFC 9112 §6.3: HEAD responses and 1xx/204/304 are
+    // body-less regardless of header fields.
+    it("is true for HEAD regardless of status", () => {
+        expect(isBodylessResponse("HEAD", 200)).toBe(true);
+        expect(isBodylessResponse("HEAD", 500)).toBe(true);
+        expect(isBodylessResponse("HEAD", undefined)).toBe(true);
+    });
+
+    it("is true for 1xx, 204 and 304 statuses", () => {
+        expect(isBodylessResponse("GET", 100)).toBe(true);
+        expect(isBodylessResponse("GET", 199)).toBe(true);
+        expect(isBodylessResponse("GET", 204)).toBe(true);
+        expect(isBodylessResponse("POST", 304)).toBe(true);
+    });
+
+    it("is false for other methods with a body-bearing status", () => {
+        expect(isBodylessResponse("GET", 200)).toBe(false);
+        expect(isBodylessResponse("POST", 201)).toBe(false);
+        expect(isBodylessResponse("GET", 302)).toBe(false);
+    });
+
+    it("is false for a non-HEAD method when the status is undecodable", () => {
+        expect(isBodylessResponse("GET", undefined)).toBe(false);
     });
 });
