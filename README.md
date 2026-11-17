@@ -6,7 +6,7 @@
 [![license](https://img.shields.io/npm/l/@browsercore/http1.svg)](LICENSE)
 
 An HTTP/1.1 client over any duplex byte stream. Serializes requests, parses
-responses, and manages the HTTP/1.1 protocol state machine — keep-alive, chunked
+responses, and manages the HTTP/1.1 protocol state machine: keep-alive, chunked
 transfer-encoding, content-encoding decompression, redirect following, and a
 cookie-header integration seam. Knows nothing about the underlying transport;
 higher layers (`@browsercore/fetch`, `@browsercore/cookies`) compose
@@ -46,7 +46,7 @@ try {
 | `Http1ConnectionImpl` | class | Concrete connection (serial request/response) |
 | `HttpRequest` | interface | Serializable request |
 | `HttpResponse` | interface | Parsed response |
-| `ParsedHeaders` | interface | Parsed header container — flat last-wins `ReadonlyMap` view plus `getHeaderValues(name)` (every value in wire order) |
+| `ParsedHeaders` | interface | Parsed header container, a flat last-wins `ReadonlyMap` view plus `getHeaderValues(name)` (every value in wire order) |
 | `ParsedHeadersImpl` | class | Immutable `ParsedHeaders` implementation built by `parseResponse` |
 | `ParsedHeaderPair` | interface | One ordered `[name, value]` wire pair |
 | `HttpBodyKind` | discriminated union | `empty` / `bytes` body |
@@ -76,31 +76,31 @@ try {
         └─ node:net / node:dns / node:crypto
 ```
 
-`@browsercore/compression` wraps `node:zlib`; `@browsercore/http1` calls it
-never `node:zlib` directly. `@browsercore/http1` does NOT import `node:events`
-— event emission is composed exclusively through the injected `EventProvider`
-on the `Transport` it consumes (browsersmith is the composition root that
-provides the runtime backend). `@browsercore/contracts` supplies the canonical
+`@browsercore/compression` wraps `node:zlib`, and http1 calls it rather than
+opening `node:zlib` itself. http1 also does NOT import `node:events`: event
+emission is composed exclusively through the injected `EventProvider` on the
+`Transport` it consumes (browsersmith, the composition root, provides the
+runtime backend). `@browsercore/contracts` supplies the canonical
 `Clock` injected via `Http1Options.clock` (see below).
 
 ## Canonical Clock (0.2.6)
 
 Since 0.2.6 the `clock` option is typed as the canonical `Clock` from
-`@browsercore/contracts` — the single time interface every protocol package
+`@browsercore/contracts`, the single time interface every protocol package
 injects (the replaceability audit's five package-local Clock shapes are being
 collapsed onto it). The local `{ now(): number }` subset http1 used to declare
 is gone; the full canonical surface is:
 
-- `now()` — wall-clock epoch ms (timestamps, ids)
-- `monotonic()` — monotonic ms (elapsed/deadline math; never compare against `now()`)
-- `sleep(ms)` — promise-based delay
-- `setTimeout(ms, fn)` / `clearTimeout(handle)` — ms-first one-shot timers with
+- `now()`, wall-clock epoch ms (timestamps, ids)
+- `monotonic()`, monotonic ms (elapsed/deadline math; never compare against `now()`)
+- `sleep(ms)`, promise-based delay
+- `setTimeout(ms, fn)` / `clearTimeout(handle)`, ms-first one-shot timers with
   an opaque `TimerHandle`
 
 http1 itself only reads `now()` (connection ids); timers and monotonic time
 are available from the same seam for future deadline logic. The default
 `systemClock` delegates to the platform globals (`Date.now()`,
-`performance.now()`, global timers) and implements the full shape — callers
+`performance.now()`, global timers) and implements the full shape, so callers
 that previously passed a bare `{ now(): number }` object must widen it (import
 `Clock` from `@browsercore/contracts`).
 
@@ -140,7 +140,7 @@ Every higher networking layer communicates with the network exclusively through 
 
 ## Contributing
 
-Contributions are welcome — bug reports, reproductions, docs and code alike. Start with [CONTRIBUTING.md](CONTRIBUTING.md); the full guide lives in the [browsersmith repo](https://github.com/jverneuer/browsersmith/blob/main/CONTRIBUTING.md). First timer? Check the [`good first issue`](https://github.com/jverneuer/browsercore-http1/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) label. Security issues: [SECURITY.md](SECURITY.md), never a public issue.
+Contributions are welcome: bug reports, reproductions, docs and code alike. Start with [CONTRIBUTING.md](CONTRIBUTING.md); the full guide lives in the [browsersmith repo](https://github.com/jverneuer/browsersmith/blob/main/CONTRIBUTING.md). First timer? Check the [`good first issue`](https://github.com/jverneuer/browsercore-http1/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) label. Security issues: [SECURITY.md](SECURITY.md), never a public issue.
 
 ## License
 
