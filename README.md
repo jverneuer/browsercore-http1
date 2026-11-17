@@ -1,9 +1,7 @@
 # @browsercore/http1
 
 [![npm version](https://img.shields.io/npm/v/@browsercore/http1)](https://www.npmjs.com/package/@browsercore/http1)
-[![coverage](https://img.shields.io/endpoint?url=https://jverneuer.github.io/browsercore-http1/badge.json)](https://jverneuer.github.io/browsercore-http1/COVERAGE.md)
 [![CI](https://img.shields.io/github/actions/workflow/status/jverneuer/browsercore-http1/ci.yml?label=ci)](https://github.com/jverneuer/browsercore-http1/actions/workflows/ci.yml)
-[![license](https://img.shields.io/npm/l/@browsercore/http1.svg)](LICENSE)
 
 An HTTP/1.1 client over any duplex byte stream. Serializes requests, parses
 responses, and manages the HTTP/1.1 protocol state machine: keep-alive, chunked
