@@ -70,6 +70,7 @@ try {
 ```
 @browsercore/http1
   └─ @browsercore/compression
+  └─ @browsercore/contracts
   └─ @browsercore/transport
         └─ node:net / node:dns / node:crypto
 ```
@@ -78,7 +79,29 @@ try {
 never `node:zlib` directly. `@browsercore/http1` does NOT import `node:events`
 — event emission is composed exclusively through the injected `EventProvider`
 on the `Transport` it consumes (browsersmith is the composition root that
-provides the runtime backend).
+provides the runtime backend). `@browsercore/contracts` supplies the canonical
+`Clock` injected via `Http1Options.clock` (see below).
+
+## Canonical Clock (0.2.6)
+
+Since 0.2.6 the `clock` option is typed as the canonical `Clock` from
+`@browsercore/contracts` — the single time interface every protocol package
+injects (the replaceability audit's five package-local Clock shapes are being
+collapsed onto it). The local `{ now(): number }` subset http1 used to declare
+is gone; the full canonical surface is:
+
+- `now()` — wall-clock epoch ms (timestamps, ids)
+- `monotonic()` — monotonic ms (elapsed/deadline math; never compare against `now()`)
+- `sleep(ms)` — promise-based delay
+- `setTimeout(ms, fn)` / `clearTimeout(handle)` — ms-first one-shot timers with
+  an opaque `TimerHandle`
+
+http1 itself only reads `now()` (connection ids); timers and monotonic time
+are available from the same seam for future deadline logic. The default
+`systemClock` delegates to the platform globals (`Date.now()`,
+`performance.now()`, global timers) and implements the full shape — callers
+that previously passed a bare `{ now(): number }` object must widen it (import
+`Clock` from `@browsercore/contracts`).
 
 ## Platform threading
 
@@ -89,7 +112,7 @@ composition root:
 | Option field | Resolved from |
 | --- | --- |
 | `decompressionProvider` | `platform.compression` |
-| `clock` | `platform.time.clock` |
+| `clock` | `platform.time` (the `Time` alias of the canonical `Clock`) |
 
 Individual fields always take precedence, so existing callers that pass
 `decompressionProvider`/`clock` directly keep working unchanged. This is the

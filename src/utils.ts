@@ -5,7 +5,8 @@
  * cross-package imports.
  */
 
-import { systemClock, type Http1ConnectionId, type Clock, type RandomSource } from "./types.js";
+import type { Clock } from "@browsercore/contracts";
+import { systemClock, type Http1ConnectionId, type RandomSource } from "./types.js";
 import { DecodeError } from "./errors.js";
 import { createRandomSource } from "@browsercore/transport";
 

@@ -5,6 +5,7 @@
  * of TLS, TCP, or DNS — it composes exclusively over `@browsercore/transport`.
  */
 
+import type { Clock, TimerHandle } from "@browsercore/contracts";
 import type { RandomSource, Transport } from "@browsercore/transport";
 import type { DecompressionProvider } from "./decompress.js";
 
@@ -228,26 +229,35 @@ export interface Http1Connection {
 }
 
 // ---------------------------------------------------------------------------
-// Clock abstraction (injected — decouples protocol code from `Date.now()`)
+// Clock (canonical — declared once in @browsercore/contracts, never locally)
 // ---------------------------------------------------------------------------
 
-/**
- * Clock for time-dependent operations. Injected via {@link Http1Options} so
- * callers control the time source — keeps the package testable against a
- * deterministic clock (reproducible id generation) and embeddable in non-Node
- * hosts (browsers, workers) where `Date.now()` may not be the desired source.
- *
- * `now()` MUST return milliseconds since the Unix epoch, matching the contract
- * of `Date.now()`.
- */
-export interface Clock {
-    /** Current time in milliseconds since the Unix epoch. */
-    now(): number;
-}
+// The Clock interface is imported from @browsercore/contracts (0.2.6) — THE
+// canonical time source for the entire stack (replaceability audit 2026-11-16,
+// remediation item #6: five package-local Clock shapes collapsed onto one).
+// http1 previously declared a local `{ now(): number }` subset here; it now
+// binds the full canonical shape so every protocol package accepts the same
+// injected clock.
 
-/** The default clock — delegates to the platform `Date.now()`. */
+/**
+ * The default clock — the platform globals (`Date.now()`, `performance.now()`,
+ * global timers), implementing the full canonical {@link Clock} shape.
+ *
+ * http1 itself only reads `now()` today (connection ids); `monotonic()`,
+ * `sleep()`, and `setTimeout()`/`clearTimeout()` are available from this same
+ * injected seam for future deadline/timer work — do not add a second time
+ * surface beside it.
+ */
 export const systemClock: Clock = {
     now: () => Date.now(),
+    monotonic: () => performance.now(),
+    sleep: (ms: number) => new Promise<void>((resolve) => { setTimeout(resolve, ms); }),
+    setTimeout: (ms: number, fn: () => void) => setTimeout(fn, ms),
+    clearTimeout: (handle: TimerHandle) => {
+        // TimerHandle is deliberately opaque; the default narrows it back to
+        // the concrete runtime timer token so the global clearTimeout accepts it.
+        clearTimeout(handle as NodeJS.Timeout);
+    },
 };
 
 /**
@@ -312,9 +322,11 @@ export interface Http1Options {
      */
     readonly decompressionProvider?: DecompressionProvider;
     /**
-     * Clock for time-dependent operations. Defaults to {@link systemClock}
-     * (delegates to `Date.now()`). Inject a deterministic clock for
-     * reproducible ids in tests.
+     * Clock for time-dependent operations — the canonical `Clock` from
+     * `@browsercore/contracts`. Defaults to {@link systemClock} (platform
+     * globals). http1 calls only `now()` (connection ids); `monotonic()` /
+     * `sleep()` / timers are part of the same seam for future deadline math.
+     * Inject a deterministic clock for reproducible ids in tests.
      */
     readonly clock?: Clock;
     /**

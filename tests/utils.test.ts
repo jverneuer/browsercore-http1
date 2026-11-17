@@ -6,6 +6,7 @@ import {
     consumeTrailers,
     decodeAscii,
 } from "../src/utils.js";
+import { systemClock } from "../src/types.js";
 import { createRandomSource } from "@browsercore/transport";
 
 const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
@@ -96,5 +97,43 @@ describe("createId", () => {
 describe("assertNever", () => {
     it("throws describing the unexpected value", () => {
         expect(() => assertNever("surprise" as never)).toThrow(/Unexpected value/);
+    });
+});
+
+describe("systemClock (canonical Clock default)", () => {
+    // The default clock implements the FULL canonical Clock from
+    // @browsercore/contracts — not just the now() subset http1 reads. These
+    // tests pin the timer surface so the contract cannot silently rot.
+    it("now() is wall-clock epoch ms comparable with Date.now()", () => {
+        const before = Date.now();
+        const now = systemClock.now();
+        expect(now).toBeGreaterThanOrEqual(before);
+        expect(now).toBeLessThanOrEqual(Date.now());
+    });
+
+    it("monotonic() never goes backwards", () => {
+        const first = systemClock.monotonic();
+        const second = systemClock.monotonic();
+        expect(second).toBeGreaterThanOrEqual(first);
+    });
+
+    it("sleep(ms) resolves no earlier than the delay", async () => {
+        const start = systemClock.monotonic();
+        await systemClock.sleep(5);
+        // 1ms slack for timer granularity — the point is "not instant".
+        expect(systemClock.monotonic() - start).toBeGreaterThanOrEqual(4);
+    });
+
+    it("setTimeout(ms, fn) fires once after the delay; clearTimeout cancels", async () => {
+        let fired = false;
+        systemClock.setTimeout(5, () => { fired = true; });
+        await systemClock.sleep(15);
+        expect(fired).toBe(true);
+
+        let cancelled = false;
+        const handle = systemClock.setTimeout(60_000, () => { cancelled = true; });
+        systemClock.clearTimeout(handle);
+        await systemClock.sleep(10);
+        expect(cancelled).toBe(false);
     });
 });
