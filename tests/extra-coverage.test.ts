@@ -6,6 +6,7 @@ import { zlibDecompressionProvider as compression } from "./helpers/zlib-provide
 import { connectHttp1 } from "../src/connection.js";
 import { ContentEncodingError } from "../src/errors.js";
 import { followRedirects } from "../src/redirect.js";
+import { responseHeaders } from "./test-helpers.js";
 import type {
     Http1Connection,
     Http1ConnectionId,
@@ -194,14 +195,14 @@ describe("followRedirects method/body preservation", () => {
                 return {
                     statusCode: 307,
                     statusText: "Temporary Redirect",
-                    headers: new Map([["location", "/new-submit"]]),
+                    headers: responseHeaders([["location", "/new-submit"]]),
                     body: new Uint8Array(0),
                 };
             }
             return {
                 statusCode: 200,
                 statusText: "OK",
-                headers: new Map<string, string>([["content-length", "2"]]),
+                headers: responseHeaders([["content-length", "2"]]),
                 body: enc("ok"),
             };
         });
@@ -231,14 +232,14 @@ describe("followRedirects method/body preservation", () => {
                 return {
                     statusCode: 308,
                     statusText: "Permanent Redirect",
-                    headers: new Map([["location", "/moved-resource"]]),
+                    headers: responseHeaders([["location", "/moved-resource"]]),
                     body: new Uint8Array(0),
                 };
             }
             return {
                 statusCode: 200,
                 statusText: "OK",
-                headers: new Map<string, string>([["content-length", "2"]]),
+                headers: responseHeaders([["content-length", "2"]]),
                 body: enc("ok"),
             };
         });

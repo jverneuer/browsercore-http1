@@ -19,11 +19,11 @@ class ControllableTransport extends FakeTransportBase {
         super("ctrl");
     }
 
-    public async write(data: Uint8Array): Promise<void> {
+    public override async write(data: Uint8Array): Promise<void> {
         this.written.push(data);
     }
 
-    public async close(): Promise<void> {
+    public override async close(): Promise<void> {
         this.state = { state: "closed", reason: { kind: "client_close" } };
         this.events.emit("close", false);
     }
@@ -223,11 +223,11 @@ describe("Http1Connection lifecycle", () => {
     });
 
     it("describes each close reason in the rejection message", async () => {
-        async function expectReason(reason: Http1CloseReason, fragment: string): Promise<void> {
+        async function expectReason(reason: Http1CloseReason, matcher: string | RegExp): Promise<void> {
             const transport = new ControllableTransport();
             const conn = await connectHttp1({ transport });
             await conn.close(reason);
-            await expect(conn.request(getReq())).rejects.toThrow(fragment);
+            await expect(conn.request(getReq())).rejects.toThrow(matcher);
         }
 
         await expectReason({ kind: "remote_close" }, /remote closed/);

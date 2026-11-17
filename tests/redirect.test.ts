@@ -7,6 +7,7 @@ import {
     resolveRedirectUrl,
     type RedirectStatusCode,
 } from "../src/redirect.js";
+import { responseHeaders } from "./test-helpers.js";
 
 /** A scripted connection: maps request URLs to responses, recording the trail. */
 class ScriptedConnection implements Http1Connection {
@@ -27,12 +28,12 @@ class ScriptedConnection implements Http1Connection {
 }
 
 function res(status: number, location?: string, body = ""): HttpResponse {
-    const headers = new Map<string, string>();
-    if (location !== undefined) headers.set("location", location);
+    const pairs: [string, string][] = [];
+    if (location !== undefined) pairs.push(["location", location]);
     return {
         statusCode: status,
         statusText: "",
-        headers,
+        headers: responseHeaders(pairs),
         body: new TextEncoder().encode(body),
     };
 }

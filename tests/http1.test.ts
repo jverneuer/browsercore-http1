@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HttpResponse } from "../src/types.js";
+import type { HttpResponse } from "../src/types.js";
 import {
     Http1Error,
     RedirectLimitError,
