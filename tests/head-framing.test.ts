@@ -31,7 +31,7 @@ class FramingTransport extends FakeTransportBase {
         this.responses.push(bytes);
     }
 
-    public async write(data: Uint8Array): Promise<void> {
+    public override async write(data: Uint8Array): Promise<void> {
         this.written.push(data);
         const next = this.responses.shift();
         if (next !== undefined) {

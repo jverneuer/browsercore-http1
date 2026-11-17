@@ -4,7 +4,6 @@ import type { Transport } from "@browsercore/transport";
 import { zlibDecompressionProvider as compression } from "./helpers/zlib-provider.js";
 import { gzipSync, brotliCompressSync } from "node:zlib";
 import { connectHttp1 } from "../src/connection.js";
-import type { HttpRequest } from "../src/types.js";
 
 /** A fake in-memory transport that answers each write with a queued response. */
 class FakeTransport extends EventEmitter implements Transport {

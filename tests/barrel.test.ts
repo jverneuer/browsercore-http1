@@ -39,5 +39,6 @@ describe("barrel re-exports", () => {
         expect(isRedirectStatus).toBeTypeOf("function");
         expect(resolveRedirectUrl).toBeTypeOf("function");
         expect(assertNever).toBeTypeOf("function");
+        expect(ParsedHeadersImpl).toBeTypeOf("function");
     });
 });

@@ -17,11 +17,11 @@ class ControllableTransport extends FakeTransportBase {
         super("ctrl");
     }
 
-    public async write(data: Uint8Array): Promise<void> {
+    public override async write(data: Uint8Array): Promise<void> {
         this.written.push(data);
     }
 
-    public async close(): Promise<void> {
+    public override async close(): Promise<void> {
         this.state = { state: "closed", reason: { kind: "client_close" } };
         this.events.emit("close", false);
     }

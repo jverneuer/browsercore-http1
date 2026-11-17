@@ -17,7 +17,9 @@
 import { gunzipSync, inflateSync, inflateRawSync, brotliDecompressSync } from "node:zlib";
 import type { EventProvider } from "@browsercore/contracts";
 import type { Transport } from "@browsercore/transport";
+import { ParsedHeadersImpl } from "../src/types.js";
 import type { DecompressionProvider } from "../src/decompress.js";
+import type { ParsedHeaders } from "../src/types.js";
 
 /**
  * Create a minimal in-memory EventProvider. Stand-in for the Node
@@ -130,6 +132,16 @@ export class FakeTransportBase implements Transport {
         this.state = { state: "closed", reason: { kind: "client_close" } };
         this.events.emit("close", false);
     }
+}
+
+/**
+ * Build {@link ParsedHeaders} from tuple pairs — the terse fixture
+ * constructor for scripted `HttpResponse.headers` values. A plain
+ * `Map<string, string>` no longer satisfies `HttpResponse` (it lacks
+ * `getHeaderValues`), so every scripted response builds the real impl.
+ */
+export function responseHeaders(pairs: readonly (readonly [string, string])[]): ParsedHeaders {
+    return new ParsedHeadersImpl(pairs.map(([name, value]) => ({ name, value })));
 }
 
 /**

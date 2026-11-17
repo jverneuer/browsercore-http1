@@ -16,7 +16,7 @@ class FakeTransport extends FakeTransportBase {
         this.responses.push(bytes);
     }
 
-    public async write(data: Uint8Array): Promise<void> {
+    public override async write(data: Uint8Array): Promise<void> {
         this.written.push(data);
         // Emit the next queued response asynchronously, like a real socket.
         const next = this.responses.shift();
@@ -43,7 +43,6 @@ describe("cookie interceptor seam", () => {
     it("injects a Cookie header from addCookies into the serialized request", async () => {
         const transport = new FakeTransport();
         transport.queueResponse(rawResponse(200, { "content-length": "2" }, "hi"));
-        const cookies = new Map<string, string>([["session", "abc"]]);
         const seen: Array<{ host: string; path: string; protocol: string }> = [];
         const conn = await connectHttp1({
             transport,

@@ -1,6 +1,6 @@
 {
     "name": "@browsercore/http1",
-    "version": "0.2.6",
+    "version": "0.2.7",
     "description": "HTTP/1.1 client over any duplex byte stream. No knowledge of TLS or TCP — only the protocol.",
     "repository": {
         "type": "git",
@@ -35,7 +35,7 @@
         "clean": "rm -rf dist",
         "build": "tsc -p tsconfig.json",
         "prepublishOnly": "npm run clean && npm run build",
-        "typecheck": "tsc -p tsconfig.json --noEmit",
+        "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
         "test": "vitest run",
         "lint": "oxlint --type-aware src/"
     },
